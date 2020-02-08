@@ -189,6 +189,129 @@ class VMFPropEntity(VMFPointEntity):
         return self.fs.open_file(self.model)
 
 
+class VMFOverlayEntity(VMFPointEntity):
+    def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
+        super().__init__(data, fs)
+
+        self.material = data["material"]
+        if not isinstance(self.material, str):
+            raise ValueError("Invalid VMF file: overlay material is not a str")
+        self.materialpath = "materials/" + self.material + ".vmt"
+
+        sides_value: str = data["sides"]
+        if not isinstance(sides_value, str):
+            raise ValueError("Invalid VMF file: overlay sides is not a str")
+        self.sides: List[int] = [int(s) for s in sides_value.split(" ")]
+
+        self.renderorder: Optional[int] = None
+        if "RenderOrder" in data:
+            self.renderorder = int(data["RenderOrder"])
+
+        self.startu = float(data["StartU"])
+        self.startv = float(data["StartV"])
+        self.endu = float(data["EndU"])
+        self.endv = float(data["EndV"])
+        self.basisorigin = VMFVector.parse_str(data["BasisOrigin"])
+        self.basisu = VMFVector.parse_str(data["BasisU"])
+        self.basisv = VMFVector.parse_str(data["BasisV"])
+        self.basisnormal = VMFVector.parse_str(data["BasisNormal"])
+        self.uv0 = VMFVector.parse_str(data["uv0"])
+        self.uv1 = VMFVector.parse_str(data["uv1"])
+        self.uv2 = VMFVector.parse_str(data["uv2"])
+        self.uv3 = VMFVector.parse_str(data["uv3"])
+
+    def open_material_file(self) -> TextIOWrapper:
+        return TextIOWrapper(cast(IO[bytes],
+                             self.fs.open_file(self.materialpath)),
+                             encoding='utf-8')
+
+
+class VMFLightEntity(VMFPointEntity):
+    def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
+        super().__init__(data, fs)
+        light_value: str = data["_light"]
+        if not isinstance(light_value, str):
+            raise ValueError("Invalid VMF file: light _light is not a str")
+        light_list = [int(s) for s in light_value.split(" ")]
+        self.color = VMFColor(*light_list[:3])
+        self.brightness = light_list[3]
+
+        light_hdr_value: str = data["_lightHDR"]
+        if not isinstance(light_hdr_value, str):
+            raise ValueError("Invalid VMF file: light _lightHDR is not a str")
+        light_hdr_list = [int(s) for s in light_value.split(" ")]
+        self.hdr_color = VMFColor(*light_hdr_list[:3])
+        self.hdr_brightness = light_hdr_list[3]
+        self.hdr_scale = float(data["_lightscaleHDR"])
+
+        self.style: Optional[int] = None
+        if "style" in data:
+            self.style = int(data["style"])
+        self.constant_attn: Optional[float] = None
+        if "_constant_attn" in data:
+            self.constant_attn = float(data["_constant_attn"])
+        self.linear_attn: Optional[float] = None
+        if "_linear_attn" in data:
+            self.linear_attn = float(data["_linear_attn"])
+        self.quadratic_attn: Optional[float] = None
+        if "_quadratic_attn" in data:
+            self.quadratic_attn = float(data["_quadratic_attn"])
+        self.fifty_percent_distance: Optional[float] = None
+        if "_fifty_percent_distance" in data:
+            self.fifty_percent_distance = float(data["_fifty_percent_distance"])
+        self.zero_percent_distance: Optional[float] = None
+        if "_zero_percent_distance" in data:
+            self.zero_percent_distance = float(data["_zero_percent_distance"])
+
+
+class VMFSpotLightEntity(VMFLightEntity):
+    def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
+        super().__init__(data, fs)
+        self.angles: VMFVector
+        if "angles" in data:
+            angles_value = data["angles"]
+            if not isinstance(angles_value, str):
+                raise ValueError("Invalid VMF file: prop entity angles is not a str")
+            self.angles = VMFVector.parse_str(angles_value)
+        else:
+            self.angles = VMFVector(0, 0, 0)
+        self.pitch = float(data["pitch"])
+
+        self.inner_cone = int(data["_inner_cone"])
+        self.cone = int(data["_cone"])
+        self.exponent = int(data["_exponent"])
+
+
+class VMFEnvLightEntity(VMFLightEntity):
+    def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
+        super().__init__(data, fs)
+        self.angles: VMFVector
+        if "angles" in data:
+            angles_value = data["angles"]
+            if not isinstance(angles_value, str):
+                raise ValueError("Invalid VMF file: prop entity angles is not a str")
+            self.angles = VMFVector.parse_str(angles_value)
+        else:
+            self.angles = VMFVector(0, 0, 0)
+        self.pitch = float(data["pitch"])
+
+        amb_light_value: str = data["_ambient"]
+        if not isinstance(amb_light_value, str):
+            raise ValueError("Invalid VMF file: light _ambient is not a str")
+        amb_light_list = [int(s) for s in amb_light_value.split(" ")]
+        self.amb_color = VMFColor(*amb_light_list[:3])
+        self.amb_brightness = amb_light_list[3]
+
+        amb_light_hdr_value: str = data["_ambientHDR"]
+        if not isinstance(amb_light_hdr_value, str):
+            raise ValueError("Invalid VMF file: light _ambientHDR is not a str")
+        amb_light_hdr_list = [int(s) for s in amb_light_value.split(" ")]
+        self.amb_hdr_color = VMFColor(*amb_light_hdr_list[:3])
+        self.amb_hdr_brightness = amb_light_hdr_list[3]
+        self.amb_hdr_scale = float(data["_AmbientScaleHDR"])
+
+        self.sun_spread_angle = float(data["SunSpreadAngle"])
+
 
 _PLANE_REGEX = re.compile(r"^\((-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*)\) "
                           r"\((-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*)\) "
@@ -428,6 +551,10 @@ class VMF():
         self.world = VMFWorldEntity(world_dict, self.fs)
 
         self.entities: List[VMFEntity] = list()
+        self.overlay_entities: List[VMFOverlayEntity] = list()
+        self.env_light_entity: Optional[VMFEnvLightEntity] = None
+        self.spot_light_entities: List[VMFSpotLightEntity] = list()
+        self.light_entities: List[VMFLightEntity] = list()
         self.func_entities: List[VMFBrushEntity] = list()
         self.prop_entities: List[VMFPropEntity] = list()
 
@@ -439,7 +566,19 @@ class VMF():
             if not isinstance(classname, str):
                 raise ValueError("Invalid VMF file: entity classname is not a str")
             entity_inst: VMFEntity
-            if classname.startswith("func"):
+            if classname == "info_overlay":
+                entity_inst = VMFOverlayEntity(entity, self.fs)
+                self.overlay_entities.append(entity_inst)
+            elif classname == "light_environment":
+                entity_inst = VMFEnvLightEntity(entity, self.fs)
+                self.env_light_entity = entity_inst
+            elif classname == "light_spot":
+                entity_inst = VMFSpotLightEntity(entity, self.fs)
+                self.spot_light_entities.append(entity_inst)
+            elif classname.startswith("light"):
+                entity_inst = VMFLightEntity(entity, self.fs)
+                self.light_entities.append(entity_inst)
+            elif classname.startswith("func"):
                 entity_inst = VMFBrushEntity(entity, self.fs)
                 self.func_entities.append(entity_inst)
             elif classname.startswith("prop"):
