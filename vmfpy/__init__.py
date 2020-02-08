@@ -31,6 +31,9 @@ class VPKFileIOWrapper(BufferedIOBase):
             size = -1
         return self._vpkf.read(size)
 
+    def read1(self, size: Optional[int] = -1) -> bytes:
+        return self.read(size)
+
     def readable(self) -> bool:
         return True
 
@@ -74,18 +77,22 @@ class VMFFileSystem():
         self._paks.remove(path)
 
     def index_files_iter(self) -> Iterator[Tuple[str, Callable[[], AnyBinaryIO]]]:
+        def _create_f_opener(p: str) -> Callable[[], AnyBinaryIO]:
+            return lambda: open(p, 'rb')
         for directory in self._dirs:
             root: str
             files: List[str]
             for root, _, files in os.walk(directory):
                 for file_name in files:
                     path = os.path.join(root, file_name)
-                    # workaround for https://github.com/python/typeshed/issues/1229
-                    yield (path, lambda: cast(BufferedIOBase, open(path, 'rb')))
+                    yield (path, _create_f_opener(path))
         for pak_file in self._paks:
             pak = vpk.open(pak_file)
+
+            def _create_pf_opener(p: str, m: Tuple[bytes, int, int, int, int, int]) -> Callable[[], AnyBinaryIO]:
+                return lambda: VPKFileIOWrapper(pak.get_vpkfile_instance(p, m))
             for path, metadata in pak.read_index_iter():
-                yield (path, lambda: VPKFileIOWrapper(pak.get_vpkfile_instance(path, metadata)))
+                yield (path, _create_pf_opener(path, metadata))
 
     def index_files(self) -> None:
         for path, open_func in self.index_files_iter():
