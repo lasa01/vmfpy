@@ -144,14 +144,14 @@ class VMFEntity():
 
 class VMFPointEntity(VMFEntity):
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
-        super(data, fs)
+        super().__init__(data, fs)
         assert self.origin is not None
         self.origin: VMFVector
 
 
 class VMFPropEntity(VMFPointEntity):
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
-        super(data, fs)
+        super().__init__(data, fs)
         self.angles: VMFVector
         if "angles" in data:
             self.angles = VMFVector(*(float(s) for s in data["angles"].split(" ")))
@@ -212,9 +212,9 @@ class VMFDispInfo():
             raise ValueError("Invalid VMF file: dispinfo normals is not a dict")
         self.normals: List[List[VMFVector]] = [[VMFVector(0, 0, 0)] * self.dimension] * self.dimension
         for row_name in normals_dict:
-            if row_name[:4] != "row":
+            if row_name[:3] != "row":
                 raise ValueError("Invalid VMF file: invalid key in dispinfo normals")
-            row_idx = int(row_name[4:])
+            row_idx = int(row_name[3:])
             row_value: str = normals_dict[row_name]
             if not isinstance(row_value, str):
                 raise ValueError("Invalid VMF file: a value in dispinfo normals is not a str")
@@ -227,9 +227,9 @@ class VMFDispInfo():
             raise ValueError("Invalid VMF file: dispinfo distances is not a dict")
         self.distances: List[List[float]] = [[0.] * self.dimension] * self.dimension
         for row_name in distances_dict:
-            if row_name[:4] != "row":
+            if row_name[:3] != "row":
                 raise ValueError("Invalid VMF file: invalid key in dispinfo distances")
-            row_idx = int(row_name[4:])
+            row_idx = int(row_name[3:])
             row_value = distances_dict[row_name]
             if not isinstance(row_value, str):
                 raise ValueError("Invalid VMF file: a value in dispinfo distances is not a str")
@@ -241,9 +241,9 @@ class VMFDispInfo():
             raise ValueError("Invalid VMF file: dispinfo offsets is not a dict")
         self.offsets: List[List[VMFVector]] = [[VMFVector(0, 0, 0)] * self.dimension] * self.dimension
         for row_name in offsets_dict:
-            if row_name[:4] != "row":
+            if row_name[:3] != "row":
                 raise ValueError("Invalid VMF file: invalid key in dispinfo offsets")
-            row_idx = int(row_name[4:])
+            row_idx = int(row_name[3:])
             row_value = offsets_dict[row_name]
             if not isinstance(row_value, str):
                 raise ValueError("Invalid VMF file: a value in dispinfo offsets is not a str")
@@ -256,9 +256,9 @@ class VMFDispInfo():
             raise ValueError("Invalid VMF file: dispinfo offset_normals is not a dict")
         self.offset_normals: List[List[VMFVector]] = [[VMFVector(0, 0, 0)] * self.dimension] * self.dimension
         for row_name in offset_normals_dict:
-            if row_name[:4] != "row":
+            if row_name[:3] != "row":
                 raise ValueError("Invalid VMF file: invalid key in dispinfo offset_normals")
-            row_idx = int(row_name[4:])
+            row_idx = int(row_name[3:])
             row_value = offset_normals_dict[row_name]
             if not isinstance(row_value, str):
                 raise ValueError("Invalid VMF file: a value in dispinfo offset_normals is not a str")
@@ -269,25 +269,25 @@ class VMFDispInfo():
         alphas_dict: vdf.VDFDict = data["alphas"]
         if not isinstance(alphas_dict, vdf.VDFDict):
             raise ValueError("Invalid VMF file: dispinfo alphas is not a dict")
-        self.alphas: List[List[int]] = [[0] * self.dimension] * self.dimension
+        self.alphas: List[List[float]] = [[0] * self.dimension] * self.dimension
         for row_name in alphas_dict:
-            if row_name[:4] != "row":
+            if row_name[:3] != "row":
                 raise ValueError("Invalid VMF file: invalid key in dispinfo alphas")
-            row_idx = int(row_name[4:])
+            row_idx = int(row_name[3:])
             row_value = alphas_dict[row_name]
             if not isinstance(row_value, str):
                 raise ValueError("Invalid VMF file: a value in dispinfo alphas is not a str")
             for idx, num_str in enumerate(row_value.split(" ")):
-                self.alphas[row_idx][idx] = int(num_str)
+                self.alphas[row_idx][idx] = float(num_str)
 
         triangle_tags_dict: vdf.VDFDict = data["triangle_tags"]
         if not isinstance(triangle_tags_dict, vdf.VDFDict):
             raise ValueError("Invalid VMF file: dispinfo triangle_tags is not a dict")
         self.triangle_tags: List[List[Tuple[int, int]]] = [[(0, 0)] * self.triangle_dimension] * self.triangle_dimension
         for row_name in triangle_tags_dict:
-            if row_name[:4] != "row":
+            if row_name[:3] != "row":
                 raise ValueError("Invalid VMF file: invalid key in dispinfo triangle_tags")
-            row_idx = int(row_name[4:])
+            row_idx = int(row_name[3:])
             row_value = triangle_tags_dict[row_name]
             if not isinstance(row_value, str):
                 raise ValueError("Invalid VMF file: a value in dispinfo triangle_tags is not a str")
@@ -356,34 +356,28 @@ class VMFSolid():
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         self.fs = fs
         self.id = int(data["id"])
-        sides = data.get_all_for("side")
-        for side in sides:
+        dict_sides = data.get_all_for("side")
+        self.sides: List[VMFSide] = list()
+        for side in dict_sides:
             if not isinstance(side, vdf.VDFDict):
                 raise ValueError("Invalid VMF file: a solid side is not a dict")
-        self._sides: List[vdf.VDFDict] = sides
-
-    def iter_sides(self) -> Iterator:
-        for side in self._sides:
-            yield VMFSide(side, self.fs)
+            self.sides.append(VMFSide(side, self.fs))
 
 
 class VMFBrushEntity(VMFEntity):
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
-        super(data, fs)
-        solids = data.get_all_for("solid")
-        for solid in solids:
+        super().__init__(data, fs)
+        dict_solids = data.get_all_for("solid")
+        self.solids: List[VMFSolid] = list()
+        for solid in dict_solids:
             if not isinstance(solid, vdf.VDFDict):
                 raise ValueError("Invalid VMF file: a solid is not a dict")
-        self._solids: List[vdf.VDFDict] = solids
-
-    def iter_solids(self) -> Iterator[VMFSolid]:
-        for solid in self._solids:
-            yield VMFSolid(solid, self.fs)
+            self.solids.append(VMFSolid(solid, self.fs))
 
 
 class VMFWorldEntity(VMFBrushEntity):
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
-        super(data, fs)
+        super().__init__(data, fs)
         assert self.classname == "worldspawn"
         self.skyname = data["skyname"]
         if not isinstance(self.skyname, str):
@@ -414,17 +408,17 @@ class VMF():
         self.mapversion = int(versioninfo["mapversion"])
         self.prefab = bool(int(versioninfo["prefab"]))
 
-        world: vdf.VDFDict = vdf_dict["world"]
-        if not isinstance(world, vdf.VDFDict):
+        world_dict: vdf.VDFDict = vdf_dict["world"]
+        if not isinstance(world_dict, vdf.VDFDict):
             raise ValueError("Invalid VMF file: world is not a dict")
-        self.world = VMFWorldEntity(world, self.fs)
+        self.world = VMFWorldEntity(world_dict, self.fs)
 
         self.entities: List[VMFEntity] = list()
         self.func_entities: List[VMFBrushEntity] = list()
         self.prop_entities: List[VMFPropEntity] = list()
 
-        entities = vdf_dict.get_all_for("entity")
-        for entity in entities:
+        dict_entities = vdf_dict.get_all_for("entity")
+        for entity in dict_entities:
             if not isinstance(entity, vdf.VDFDict):
                 raise ValueError("Invalid VMF file: entity is not a dict")
             classname: str = entity["classname"]
@@ -441,4 +435,4 @@ class VMF():
                 entity_inst = VMFPointEntity(entity, self.fs)
             else:
                 entity_inst = VMFEntity(entity, self.fs)
-            entities.append(entity_inst)
+            self.entities.append(entity_inst)
