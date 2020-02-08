@@ -1,0 +1,4 @@
+git+https://github.com/lasa01/vdf.git#egg=vdf
+vpk
+mypy
+flake8
