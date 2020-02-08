@@ -116,6 +116,22 @@ class VMFVector(NamedTuple):
     y: float
     z: float
 
+    @staticmethod
+    def parse_str(data: str) -> 'VMFVector':
+        nums = data.split(" ")
+        assert len(nums) == 3
+        return VMFVector(*(float(s) for s in nums))
+
+    @staticmethod
+    def parse_sq_brackets(data: str) -> 'VMFVector':
+        match = _VECTOR_REGEX.match(data)
+        assert match is not None
+        return VMFVector(*(float(s) for s in match.groups()))
+
+    @staticmethod
+    def parse_tuple(data: Tuple[str, str, str]) -> 'VMFVector':
+        return VMFVector(*(float(s) for s in data))
+
 
 class VMFColor(NamedTuple):
     r: int
@@ -136,7 +152,7 @@ class VMFEntity():
             origin_value = data["origin"]
             if not isinstance(origin_value, str):
                 raise ValueError("Invalid VMF file: entity origin is not a str")
-            self.origin = VMFVector(*(float(s) for s in origin_value.split(" ")))
+            self.origin = VMFVector.parse_str(origin_value)
         self.spawnflags: Optional[int] = None
         if "spawnflags" in data:
             self.spawnflags = int(data["spawnflags"])
@@ -154,7 +170,10 @@ class VMFPropEntity(VMFPointEntity):
         super().__init__(data, fs)
         self.angles: VMFVector
         if "angles" in data:
-            self.angles = VMFVector(*(float(s) for s in data["angles"].split(" ")))
+            angles_value = data["angles"]
+            if not isinstance(angles_value, str):
+                raise ValueError("Invalid VMF file: prop entity angles is not a str")
+            self.angles = VMFVector.parse_str(angles_value)
         else:
             self.angles = VMFVector(0, 0, 0)
         self.model = data["model"]
@@ -180,6 +199,15 @@ class VMFPlane(NamedTuple):
     top_l: VMFVector
     top_r: VMFVector
 
+    @staticmethod
+    def parse(data: str) -> 'VMFPlane':
+        match = _PLANE_REGEX.match(data)
+        assert match is not None
+        floats = [float(s) for s in match.groups()]
+        return VMFPlane(VMFVector(*floats[:3]),
+                        VMFVector(*floats[3:6]),
+                        VMFVector(*floats[6:9]))
+
 
 _AXIS_REGEX = re.compile(r"^\[(-?\d*\.?\d*) (-?\d*\.?\d*) (-?\d*\.?\d*) (-?\d*\.?\d*)] (-?\d*\.?\d*)$")
 
@@ -191,6 +219,13 @@ class VMFAxis(NamedTuple):
     trans: float
     scale: float
 
+    @staticmethod
+    def parse(data: str) -> 'VMFAxis':
+        match = _AXIS_REGEX.match(data)
+        assert match is not None
+        floats = [float(s) for s in match.groups()]
+        return VMFAxis(*floats)
+
 
 class VMFDispInfo():
     def __init__(self, data: vdf.VDFDict):
@@ -198,11 +233,7 @@ class VMFDispInfo():
         self.triangle_dimension = 2 ** self.power
         self.dimension = self.triangle_dimension + 1
 
-        startpos_match = _VECTOR_REGEX.match(data["startposition"])
-        if startpos_match is None:
-            raise ValueError("Invalid VMF file: dispinfo startposition is not valid")
-        startpos_floats = [float(s) for s in startpos_match.groups()]
-        self.startposition = VMFVector(*startpos_floats)
+        self.startposition = VMFVector.parse_sq_brackets(data["startposition"])
 
         self.elevation = float(data["elevation"])
         self.subdiv = bool(int(data["subdiv"]))
@@ -219,8 +250,9 @@ class VMFDispInfo():
             if not isinstance(row_value, str):
                 raise ValueError("Invalid VMF file: a value in dispinfo normals is not a str")
             row_nums_it = iter(row_value.split(" "))
+            vec_tuple: Tuple[str, str, str]
             for idx, vec_tuple in enumerate(zip(row_nums_it, row_nums_it, row_nums_it)):
-                self.normals[row_idx][idx] = VMFVector(*(float(s) for s in vec_tuple))
+                self.normals[row_idx][idx] = VMFVector.parse_tuple(vec_tuple)
 
         distances_dict: vdf.VDFDict = data["distances"]
         if not isinstance(distances_dict, vdf.VDFDict):
@@ -249,8 +281,7 @@ class VMFDispInfo():
                 raise ValueError("Invalid VMF file: a value in dispinfo offsets is not a str")
             row_nums_it = iter(row_value.split(" "))
             for idx, vec_tuple in enumerate(zip(row_nums_it, row_nums_it, row_nums_it)):
-                self.offsets[row_idx][idx] = VMFVector(*(float(s) for s in vec_tuple))
-
+                self.offsets[row_idx][idx] = VMFVector.parse_tuple(vec_tuple)
         offset_normals_dict: vdf.VDFDict = data["offset_normals"]
         if not isinstance(offset_normals_dict, vdf.VDFDict):
             raise ValueError("Invalid VMF file: dispinfo offset_normals is not a dict")
@@ -264,7 +295,7 @@ class VMFDispInfo():
                 raise ValueError("Invalid VMF file: a value in dispinfo offset_normals is not a str")
             row_nums_it = iter(row_value.split(" "))
             for idx, vec_tuple in enumerate(zip(row_nums_it, row_nums_it, row_nums_it)):
-                self.offset_normals[row_idx][idx] = VMFVector(*(float(s) for s in vec_tuple))
+                self.offset_normals[row_idx][idx] = VMFVector.parse_tuple(vec_tuple)
 
         alphas_dict: vdf.VDFDict = data["alphas"]
         if not isinstance(alphas_dict, vdf.VDFDict):
@@ -309,32 +340,13 @@ class VMFSide():
         self.fs = fs
 
         self.id = int(data["id"])
-
-        plane_match = _PLANE_REGEX.match(data["plane"])
-        if plane_match is None:
-            raise ValueError("Invalid VMF file: side plane is not valid")
-        plane_floats = [float(s) for s in plane_match.groups()]
-        self.plane = VMFPlane(VMFVector(*plane_floats[:3]),
-                              VMFVector(*plane_floats[3:6]),
-                              VMFVector(*plane_floats[6:9]))
-
+        self.plane = VMFPlane.parse(data["plane"])
         self.material = data["material"]
         if not isinstance(self.material, str):
             raise ValueError("Invalid VMF file: side material is not a str")
         self.materialpath = "materials/" + self.material + ".vmt"
-
-        uaxis_match = _AXIS_REGEX.match(data["uaxis"])
-        if uaxis_match is None:
-            raise ValueError("Invalid VMF file: side uaxis is not valid")
-        uaxis_floats = [float(s) for s in uaxis_match.groups()]
-        self.uaxis = VMFAxis(*uaxis_floats)
-
-        vaxis_match = _AXIS_REGEX.match(data["vaxis"])
-        if vaxis_match is None:
-            raise ValueError("Invalid VMF file: side vaxis is not valid")
-        vaxis_floats = [float(s) for s in vaxis_match.groups()]
-        self.vaxis = VMFAxis(*vaxis_floats)
-
+        self.uaxis = VMFAxis.parse(data["uaxis"])
+        self.vaxis = VMFAxis.parse(data["vaxis"])
         self.rotation = float(data["rotation"])
         self.lightmapscale = int(data["lightmapscale"])
         self.smoothing_groups = int(data["smoothing_groups"]).to_bytes(4, 'little')
