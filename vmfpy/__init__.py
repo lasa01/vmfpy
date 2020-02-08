@@ -3,7 +3,12 @@ import vpk
 import os
 import re
 from io import BufferedIOBase, TextIOBase, TextIOWrapper
-from typing import List, Dict, Callable, Iterator, Iterable, Tuple, Optional, NamedTuple, IO, cast
+from typing import List, Dict, Callable, Iterator, Iterable, Tuple, Optional, NamedTuple, IO, Union, cast
+
+
+# workaround for https://github.com/python/typeshed/issues/1229
+AnyTextIO = Union[TextIOBase, IO[str]]
+AnyBinaryIO = Union[BufferedIOBase, IO[bytes]]
 
 
 class VPKFileIOWrapper(BufferedIOBase):
@@ -54,7 +59,7 @@ class VMFFileSystem():
     def __init__(self) -> None:
         self._dirs: List[str] = list()
         self._paks: List[str] = list()
-        self._tree: Dict[str, Callable[[], BufferedIOBase]] = dict()
+        self._tree: Dict[str, Callable[[], AnyBinaryIO]] = dict()
 
     def add_dir(self, path: str) -> None:
         self._dirs.append(path)
@@ -68,7 +73,7 @@ class VMFFileSystem():
     def remove_pak(self, path: str) -> None:
         self._paks.remove(path)
 
-    def index_files_iter(self) -> Iterator[Tuple[str, Callable[[], BufferedIOBase]]]:
+    def index_files_iter(self) -> Iterator[Tuple[str, Callable[[], AnyBinaryIO]]]:
         for directory in self._dirs:
             root: str
             files: List[str]
@@ -89,7 +94,7 @@ class VMFFileSystem():
     def clear_index(self) -> None:
         self._tree.clear()
 
-    def open_file(self, path: str) -> BufferedIOBase:
+    def open_file(self, path: str) -> AnyBinaryIO:
         path = path.lower()
         if path not in self._tree:
             raise FileNotFoundError(path)
@@ -154,7 +159,7 @@ class VMFPropEntity(VMFPointEntity):
         else:
             self.skin = 0
 
-    def open_model(self) -> BufferedIOBase:
+    def open_model(self) -> AnyBinaryIO:
         return self.fs.open_file(self.model)
 
 
@@ -385,7 +390,7 @@ class VMFWorldEntity(VMFBrushEntity):
 
 
 class VMF():
-    def __init__(self, file: TextIOBase, data_dirs: Iterable[str] = [], data_paks: Iterable[str] = []):
+    def __init__(self, file: AnyTextIO, data_dirs: Iterable[str] = [], data_paks: Iterable[str] = []):
         self.fs = VMFFileSystem()
         for data_dir in data_dirs:
             self.fs.add_dir(data_dir)
