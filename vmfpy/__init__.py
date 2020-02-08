@@ -12,6 +12,7 @@ AnyBinaryIO = Union[BufferedIOBase, IO[bytes]]
 
 
 class VPKFileIOWrapper(BufferedIOBase):
+    """An IO wrapper for a file inside a VPK archive."""
     def __init__(self, vpkf: vpk.VPKFile):
         self._vpkf = vpkf
 
@@ -59,6 +60,7 @@ class VPKFileIOWrapper(BufferedIOBase):
 
 
 class VMFFileSystem():
+    """File system for opening game files."""
     def __init__(self) -> None:
         self._dirs: List[str] = list()
         self._paks: List[str] = list()
@@ -112,6 +114,7 @@ _VECTOR_REGEX = re.compile(r"^\[(-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*
 
 
 class VMFVector(NamedTuple):
+    """An XYZ location (or rotation) given by 3 float values."""
     x: float
     y: float
     z: float
@@ -134,31 +137,38 @@ class VMFVector(NamedTuple):
 
 
 class VMFColor(NamedTuple):
+    """A color value using 3 integers between 0 and 255."""
     r: int
     g: int
     b: int
 
 
 class VMFEntity():
+    """An entity."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         self.data = data
         self.fs = fs
         self.id = int(data["id"])
+        """This is a unique number among other entity ids."""
         self.classname: str = data["classname"]
+        """This is the name of the entity class."""
         if not isinstance(self.classname, str):
             raise ValueError("Invalid VMF file: entity classname is not a str")
         self.origin: Optional[VMFVector] = None
+        """This is the point where the point entity exists."""
         if "origin" in data:
             origin_value = data["origin"]
             if not isinstance(origin_value, str):
                 raise ValueError("Invalid VMF file: entity origin is not a str")
             self.origin = VMFVector.parse_str(origin_value)
         self.spawnflags: Optional[int] = None
+        """Indicates which flags are enabled on the entity."""
         if "spawnflags" in data:
             self.spawnflags = int(data["spawnflags"])
 
 
 class VMFPointEntity(VMFEntity):
+    """A point based entity."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         super().__init__(data, fs)
         assert self.origin is not None
@@ -166,9 +176,11 @@ class VMFPointEntity(VMFEntity):
 
 
 class VMFPropEntity(VMFPointEntity):
+    """Adds a model to the world."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         super().__init__(data, fs)
         self.angles: VMFVector
+        """This entity's orientation in the world."""
         if "angles" in data:
             angles_value = data["angles"]
             if not isinstance(angles_value, str):
@@ -177,9 +189,11 @@ class VMFPropEntity(VMFPointEntity):
         else:
             self.angles = VMFVector(0, 0, 0)
         self.model = data["model"]
+        """The model this entity should appear as."""
         if not isinstance(self.model, str):
             raise ValueError("Invalid VMF file: prop entity model is not a str")
         self.skin: int
+        """Some models have multiple skins. This value selects from the index, starting with 0."""
         if "skin" in data:
             self.skin = int(data["skin"])
         else:
@@ -190,10 +204,12 @@ class VMFPropEntity(VMFPointEntity):
 
 
 class VMFOverlayEntity(VMFPointEntity):
+    """More powerful version of a material projected onto existing surfaces."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         super().__init__(data, fs)
 
         self.material = data["material"]
+        """The material to overlay."""
         if not isinstance(self.material, str):
             raise ValueError("Invalid VMF file: overlay material is not a str")
         self.materialpath = "materials/" + self.material + ".vmt"
@@ -202,19 +218,29 @@ class VMFOverlayEntity(VMFPointEntity):
         if not isinstance(sides_value, str):
             raise ValueError("Invalid VMF file: overlay sides is not a str")
         self.sides: List[int] = [int(s) for s in sides_value.split(" ")]
+        """Faces on which the overlay will be applied."""
 
         self.renderorder: Optional[int] = None
+        """Higher values render after lower values (on top). This value can be 0–3."""
         if "RenderOrder" in data:
             self.renderorder = int(data["RenderOrder"])
 
         self.startu = float(data["StartU"])
+        """Texture coordinates for the image."""
         self.startv = float(data["StartV"])
+        """Texture coordinates for the image."""
         self.endu = float(data["EndU"])
+        """Texture coordinates for the image."""
         self.endv = float(data["EndV"])
+        """Texture coordinates for the image."""
         self.basisorigin = VMFVector.parse_str(data["BasisOrigin"])
+        """Offset of the surface from the position of the overlay entity."""
         self.basisu = VMFVector.parse_str(data["BasisU"])
+        """Direction of the material's X-axis."""
         self.basisv = VMFVector.parse_str(data["BasisV"])
+        """Direction of the material's Y-axis."""
         self.basisnormal = VMFVector.parse_str(data["BasisNormal"])
+        """Direction out of the surface."""
         self.uv0 = VMFVector.parse_str(data["uv0"])
         self.uv1 = VMFVector.parse_str(data["uv1"])
         self.uv2 = VMFVector.parse_str(data["uv2"])
@@ -227,6 +253,7 @@ class VMFOverlayEntity(VMFPointEntity):
 
 
 class VMFLightEntity(VMFPointEntity):
+    """Creates an invisible, static light source that shines in all directions."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         super().__init__(data, fs)
         light_value: str = data["_light"]
@@ -234,40 +261,53 @@ class VMFLightEntity(VMFPointEntity):
             raise ValueError("Invalid VMF file: light _light is not a str")
         light_list = [int(s) for s in light_value.split(" ")]
         self.color = VMFColor(*light_list[:3])
+        """The RGB color of the light."""
         self.brightness = light_list[3]
+        """The brightness of the light."""
 
         light_hdr_value: str = data["_lightHDR"]
         if not isinstance(light_hdr_value, str):
             raise ValueError("Invalid VMF file: light _lightHDR is not a str")
         light_hdr_list = [int(s) for s in light_value.split(" ")]
         self.hdr_color = VMFColor(*light_hdr_list[:3])
+        """Color override used in HDR mode. Default is -1 -1 -1 which means no change."""
         self.hdr_brightness = light_hdr_list[3]
+        """Brightness override used in HDR mode. Default is 1 which means no change."""
         self.hdr_scale = float(data["_lightscaleHDR"])
+        """A simple intensity multiplier used when compiling HDR lighting."""
 
         self.style: Optional[int] = None
+        """Various Custom Appearance presets."""
         if "style" in data:
             self.style = int(data["style"])
         self.constant_attn: Optional[float] = None
+        """Determines how the intensity of the emitted light falls off over distance."""
         if "_constant_attn" in data:
             self.constant_attn = float(data["_constant_attn"])
         self.linear_attn: Optional[float] = None
+        """Determines how the intensity of the emitted light falls off over distance."""
         if "_linear_attn" in data:
             self.linear_attn = float(data["_linear_attn"])
         self.quadratic_attn: Optional[float] = None
+        """Determines how the intensity of the emitted light falls off over distance."""
         if "_quadratic_attn" in data:
             self.quadratic_attn = float(data["_quadratic_attn"])
         self.fifty_percent_distance: Optional[float] = None
+        """Distance at which brightness should have fallen to 50%. Overrides attn if non-zero."""
         if "_fifty_percent_distance" in data:
             self.fifty_percent_distance = float(data["_fifty_percent_distance"])
         self.zero_percent_distance: Optional[float] = None
+        """Distance at which brightness should have fallen to (1/256)%. Overrides attn if non-zero."""
         if "_zero_percent_distance" in data:
             self.zero_percent_distance = float(data["_zero_percent_distance"])
 
 
 class VMFSpotLightEntity(VMFLightEntity):
+    """A cone-shaped, invisible light source."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         super().__init__(data, fs)
         self.angles: VMFVector
+        """This entity's orientation in the world."""
         if "angles" in data:
             angles_value = data["angles"]
             if not isinstance(angles_value, str):
@@ -276,16 +316,22 @@ class VMFSpotLightEntity(VMFLightEntity):
         else:
             self.angles = VMFVector(0, 0, 0)
         self.pitch = float(data["pitch"])
+        """Used instead of angles value for reasons unknown."""
 
         self.inner_cone = int(data["_inner_cone"])
+        """The angle of the inner spotlight beam."""
         self.cone = int(data["_cone"])
+        """The angle of the outer spotlight beam."""
         self.exponent = int(data["_exponent"])
+        """Changes the distance between the umbra and penumbra cone."""
 
 
 class VMFEnvLightEntity(VMFLightEntity):
+    """Casts parallel directional lighting and diffuse skylight from the toolsskybox texture."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         super().__init__(data, fs)
         self.angles: VMFVector
+        """This entity's orientation in the world."""
         if "angles" in data:
             angles_value = data["angles"]
             if not isinstance(angles_value, str):
@@ -294,23 +340,30 @@ class VMFEnvLightEntity(VMFLightEntity):
         else:
             self.angles = VMFVector(0, 0, 0)
         self.pitch = float(data["pitch"])
+        """Used instead of angles value for reasons unknown."""
 
         amb_light_value: str = data["_ambient"]
         if not isinstance(amb_light_value, str):
             raise ValueError("Invalid VMF file: light _ambient is not a str")
         amb_light_list = [int(s) for s in amb_light_value.split(" ")]
         self.amb_color = VMFColor(*amb_light_list[:3])
+        """Color of the diffuse skylight."""
         self.amb_brightness = amb_light_list[3]
+        """Brightness of the diffuse skylight."""
 
         amb_light_hdr_value: str = data["_ambientHDR"]
         if not isinstance(amb_light_hdr_value, str):
             raise ValueError("Invalid VMF file: light _ambientHDR is not a str")
         amb_light_hdr_list = [int(s) for s in amb_light_value.split(" ")]
         self.amb_hdr_color = VMFColor(*amb_light_hdr_list[:3])
+        """Override for ambient color when compiling HDR lighting."""
         self.amb_hdr_brightness = amb_light_hdr_list[3]
+        """Override for ambient brightness when compiling HDR lighting."""
         self.amb_hdr_scale = float(data["_AmbientScaleHDR"])
+        """Amount to scale the ambient light by when compiling for HDR."""
 
         self.sun_spread_angle = float(data["SunSpreadAngle"])
+        """The angular extent of the sun for casting soft shadows."""
 
 
 _PLANE_REGEX = re.compile(r"^\((-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*)\) "
@@ -319,6 +372,7 @@ _PLANE_REGEX = re.compile(r"^\((-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\
 
 
 class VMFPlane(NamedTuple):
+    """"A fundamental two-dimensional object defined by three points."""
     btm_l: VMFVector
     top_l: VMFVector
     top_r: VMFVector
@@ -338,6 +392,7 @@ _AXIS_REGEX = re.compile(r"^\[(-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.
 
 
 class VMFAxis(NamedTuple):
+    """Texture specific axis."""
     x: float
     y: float
     z: float
@@ -353,20 +408,26 @@ class VMFAxis(NamedTuple):
 
 
 class VMFDispInfo():
+    """Deals with all the information for a displacement map."""
     def __init__(self, data: vdf.VDFDict):
         self.power = int(data["power"])
+        """Used to calculate the number of rows and columns."""
         self.triangle_dimension = 2 ** self.power
+        """The number of rows and columns in triangles."""
         self.dimension = self.triangle_dimension + 1
-
+        """The number of rows and columns in vertexes."""
         self.startposition = VMFVector.parse_sq_brackets(data["startposition"])
-
+        """The position of the bottom left corner in an actual x y z position."""
         self.elevation = float(data["elevation"])
+        """A universal displacement in the direction of the vertex's normal added to all of the points."""
         self.subdiv = bool(int(data["subdiv"]))
+        """Marks whether or not the displacement is being subdivided."""
 
         normals_dict: vdf.VDFDict = data["normals"]
         if not isinstance(normals_dict, vdf.VDFDict):
             raise ValueError("Invalid VMF file: dispinfo normals is not a dict")
         self.normals: List[List[VMFVector]] = [[VMFVector(0, 0, 0)] * self.dimension] * self.dimension
+        """Defines the normal line for each vertex."""
         for row_name in normals_dict:
             if row_name[:3] != "row":
                 raise ValueError("Invalid VMF file: invalid key in dispinfo normals")
@@ -383,6 +444,7 @@ class VMFDispInfo():
         if not isinstance(distances_dict, vdf.VDFDict):
             raise ValueError("Invalid VMF file: dispinfo distances is not a dict")
         self.distances: List[List[float]] = [[0.] * self.dimension] * self.dimension
+        """The distance values represent how much the vertex is moved along the normal line."""
         for row_name in distances_dict:
             if row_name[:3] != "row":
                 raise ValueError("Invalid VMF file: invalid key in dispinfo distances")
@@ -397,6 +459,7 @@ class VMFDispInfo():
         if not isinstance(offsets_dict, vdf.VDFDict):
             raise ValueError("Invalid VMF file: dispinfo offsets is not a dict")
         self.offsets: List[List[VMFVector]] = [[VMFVector(0, 0, 0)] * self.dimension] * self.dimension
+        """Lists all the default positions for each vertex in a displacement map."""
         for row_name in offsets_dict:
             if row_name[:3] != "row":
                 raise ValueError("Invalid VMF file: invalid key in dispinfo offsets")
@@ -411,6 +474,7 @@ class VMFDispInfo():
         if not isinstance(offset_normals_dict, vdf.VDFDict):
             raise ValueError("Invalid VMF file: dispinfo offset_normals is not a dict")
         self.offset_normals: List[List[VMFVector]] = [[VMFVector(0, 0, 0)] * self.dimension] * self.dimension
+        """Defines the default normal lines that the normals are based from."""
         for row_name in offset_normals_dict:
             if row_name[:3] != "row":
                 raise ValueError("Invalid VMF file: invalid key in dispinfo offset_normals")
@@ -426,6 +490,7 @@ class VMFDispInfo():
         if not isinstance(alphas_dict, vdf.VDFDict):
             raise ValueError("Invalid VMF file: dispinfo alphas is not a dict")
         self.alphas: List[List[float]] = [[0] * self.dimension] * self.dimension
+        """Contains a value for each vertex that represents how much of which texture to shown in blended materials."""
         for row_name in alphas_dict:
             if row_name[:3] != "row":
                 raise ValueError("Invalid VMF file: invalid key in dispinfo alphas")
@@ -440,6 +505,7 @@ class VMFDispInfo():
         if not isinstance(triangle_tags_dict, vdf.VDFDict):
             raise ValueError("Invalid VMF file: dispinfo triangle_tags is not a dict")
         self.triangle_tags: List[List[Tuple[int, int]]] = [[(0, 0)] * self.triangle_dimension] * self.triangle_dimension
+        """Contains information specific to each triangle in the displacement."""
         for row_name in triangle_tags_dict:
             if row_name[:3] != "row":
                 raise ValueError("Invalid VMF file: invalid key in dispinfo triangle_tags")
@@ -458,25 +524,36 @@ class VMFDispInfo():
         if not isinstance(allowed_verts_value, str):
             raise ValueError("Invalid VMF file: value of allowed_verts 10 is not a str")
         self.allowed_verts = tuple((int(s) for s in allowed_verts_value.split(" ")))
+        """This states which vertices share an edge with another displacement map, but not a vertex."""
 
 
 class VMFSide():
+    """Defines all the data relevant to one side and just to that side."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         self.fs = fs
-
+        """File system for opening game files."""
         self.id = int(data["id"])
+        """A unique value among other sides ids."""
         self.plane = VMFPlane.parse(data["plane"])
+        """Defines the orientation of the face."""
         self.material = data["material"]
+        """The directory and name of the texture the side has applied to it."""
         if not isinstance(self.material, str):
             raise ValueError("Invalid VMF file: side material is not a str")
         self.materialpath = "materials/" + self.material + ".vmt"
         self.uaxis = VMFAxis.parse(data["uaxis"])
+        """The u-axis and v-axis are the texture specific axes."""
         self.vaxis = VMFAxis.parse(data["vaxis"])
+        """The u-axis and v-axis are the texture specific axes."""
         self.rotation = float(data["rotation"])
+        """The rotation of the given texture on the side."""
         self.lightmapscale = int(data["lightmapscale"])
+        """The light map resolution on the face."""
         self.smoothing_groups = int(data["smoothing_groups"]).to_bytes(4, 'little')
+        """"Select a smoothing group to use for lighting on the face."""
 
         self.dispinfo: Optional[VMFDispInfo] = None
+        """Deals with all the information for a displacement map."""
         if "dispinfo" in data:
             dispinfo_dict = data["dispinfo"]
             if not isinstance(dispinfo_dict, vdf.VDFDict):
@@ -490,9 +567,12 @@ class VMFSide():
 
 
 class VMFSolid():
+    """Represents 1 single brush in Hammer."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         self.fs = fs
+        """File system for opening game files."""
         self.id = int(data["id"])
+        """A unique value among other solids' IDs."""
         dict_sides = data.get_all_for("side")
         self.sides: List[VMFSide] = list()
         for side in dict_sides:
@@ -502,6 +582,7 @@ class VMFSolid():
 
 
 class VMFBrushEntity(VMFEntity):
+    """A brush based entity."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         super().__init__(data, fs)
         dict_solids = data.get_all_for("solid")
@@ -513,10 +594,12 @@ class VMFBrushEntity(VMFEntity):
 
 
 class VMFWorldEntity(VMFBrushEntity):
+    """Contains all the world brush information for Hammer."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         super().__init__(data, fs)
         assert self.classname == "worldspawn"
         self.skyname = data["skyname"]
+        """The name of the skybox to be used."""
         if not isinstance(self.skyname, str):
             raise ValueError("Invalid VMF file: world skyname is not a str")
         self.skypath = "materials/skybox/" + self.skyname + ".vmt"
@@ -530,6 +613,7 @@ class VMFWorldEntity(VMFBrushEntity):
 class VMF():
     def __init__(self, file: AnyTextIO, data_dirs: Iterable[str] = [], data_paks: Iterable[str] = []):
         self.fs = VMFFileSystem()
+        """File system for opening game files."""
         for data_dir in data_dirs:
             self.fs.add_dir(data_dir)
         for data_pak in data_paks:
@@ -541,22 +625,34 @@ class VMF():
         if not isinstance(versioninfo, vdf.VDFDict):
             raise ValueError("Invalid VMF file: versioninfo is not a dict")
         self.editorversion = int(versioninfo["editorversion"])
+        """The version of Hammer used to create the file, version 4.00 is "400"."""
         self.editorbuild = int(versioninfo["editorbuild"])
+        """The patch number of Hammer the file was generated with."""
         self.mapversion = int(versioninfo["mapversion"])
+        """This represents how many times you've saved the file, useful for comparing old or new versions."""
         self.prefab = bool(int(versioninfo["prefab"]))
+        """Whether this is a full map or simply a collection of prefabricated objects."""
 
         world_dict: vdf.VDFDict = vdf_dict["world"]
         if not isinstance(world_dict, vdf.VDFDict):
             raise ValueError("Invalid VMF file: world is not a dict")
         self.world = VMFWorldEntity(world_dict, self.fs)
+        """"Contains all the world brush information for Hammer."""
 
         self.entities: List[VMFEntity] = list()
+        """List of all entities in the map."""
         self.overlay_entities: List[VMFOverlayEntity] = list()
+        """List of info_overlays in the map."""
         self.env_light_entity: Optional[VMFEnvLightEntity] = None
+        """List of light_environments in the map."""
         self.spot_light_entities: List[VMFSpotLightEntity] = list()
+        """List of light_spots in the map."""
         self.light_entities: List[VMFLightEntity] = list()
+        """List of other lights in the map."""
         self.func_entities: List[VMFBrushEntity] = list()
+        """List of func (brush) entities in the map."""
         self.prop_entities: List[VMFPropEntity] = list()
+        """List of prop entities in the map."""
 
         dict_entities = vdf_dict.get_all_for("entity")
         for entity in dict_entities:
