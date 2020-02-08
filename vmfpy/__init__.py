@@ -108,7 +108,7 @@ class VMFFileSystem():
         return self._tree[path]()
 
 
-_VECTOR_REGEX = re.compile(r"^\[(-?\d*\.?\d*) (-?\d*\.?\d*) (-?\d*\.?\d*)]$")
+_VECTOR_REGEX = re.compile(r"^\[(-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*)]$")
 
 
 class VMFVector(NamedTuple):
@@ -189,9 +189,10 @@ class VMFPropEntity(VMFPointEntity):
         return self.fs.open_file(self.model)
 
 
-_PLANE_REGEX = re.compile(r"^\((-?\d*\.?\d*) (-?\d*\.?\d*) (-?\d*\.?\d*)\) "
-                          r"\((-?\d*\.?\d*) (-?\d*\.?\d*) (-?\d*\.?\d*)\) "
-                          r"\((-?\d*\.?\d*) (-?\d*\.?\d*) (-?\d*\.?\d*)\)$")
+
+_PLANE_REGEX = re.compile(r"^\((-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*)\) "
+                          r"\((-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*)\) "
+                          r"\((-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*)\)$")
 
 
 class VMFPlane(NamedTuple):
@@ -209,7 +210,8 @@ class VMFPlane(NamedTuple):
                         VMFVector(*floats[6:9]))
 
 
-_AXIS_REGEX = re.compile(r"^\[(-?\d*\.?\d*) (-?\d*\.?\d*) (-?\d*\.?\d*) (-?\d*\.?\d*)] (-?\d*\.?\d*)$")
+_AXIS_REGEX = re.compile(r"^\[(-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*)] "
+                         r"(-?\d*\.?\d*e?-?\d*)$")
 
 
 class VMFAxis(NamedTuple):
