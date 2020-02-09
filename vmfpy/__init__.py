@@ -1,9 +1,10 @@
 import vdf
 import vpk
 import os
+from pathlib import PurePosixPath
 import re
 from io import BufferedIOBase, TextIOBase, TextIOWrapper
-from typing import List, Dict, Callable, Iterator, Iterable, Tuple, Optional, NamedTuple, IO, Union, cast
+from typing import List, Set, Dict, Callable, Iterator, Iterable, Tuple, Optional, NamedTuple, IO, Union, cast
 
 
 # workaround for https://github.com/python/typeshed/issues/1229
@@ -59,56 +60,77 @@ class VPKFileIOWrapper(BufferedIOBase):
         return self._vpkf.tell()
 
 
+class DirContents(NamedTuple):
+    dirs: Set[str]
+    files: Set[str]
+
+
 class VMFFileSystem():
     """File system for opening game files."""
     def __init__(self) -> None:
-        self._dirs: List[str] = list()
-        self._paks: List[str] = list()
-        self._tree: Dict[str, Callable[[], AnyBinaryIO]] = dict()
+        self._dirs: Set[str] = set()
+        self._paks: Set[str] = set()
+        self._index: Dict[PurePosixPath, Callable[[], AnyBinaryIO]] = dict()
+        self.tree: Dict[PurePosixPath, DirContents] = dict()
 
     def add_dir(self, path: str) -> None:
-        self._dirs.append(path)
+        self._dirs.add(path)
 
     def remove_dir(self, path: str) -> None:
         self._dirs.remove(path)
 
     def add_pak(self, path: str) -> None:
-        self._paks.append(path)
+        self._paks.add(path)
 
     def remove_pak(self, path: str) -> None:
         self._paks.remove(path)
 
-    def index_files_iter(self) -> Iterator[Tuple[str, Callable[[], AnyBinaryIO]]]:
-        def _create_f_opener(p: str) -> Callable[[], AnyBinaryIO]:
-            return lambda: open(p, 'rb')
+    @staticmethod
+    def _create_f_opener(p: str) -> Callable[[], AnyBinaryIO]:
+        return lambda: open(p, 'rb')
+
+    @staticmethod
+    def _create_pf_opener(p: str, m: Tuple[bytes, int, int, int, int, int], v: vpk.VPK) -> Callable[[], AnyBinaryIO]:
+        return lambda: VPKFileIOWrapper(v.get_vpkfile_instance(p, m))
+
+    def index_files_iter(self) -> Iterator[Tuple[PurePosixPath, Callable[[], AnyBinaryIO]]]:
         for directory in self._dirs:
             root: str
             files: List[str]
             for root, _, files in os.walk(directory):
-                root = os.path.relpath(root, directory).replace("\\", "/")
+                root_path = PurePosixPath(root.replace("\\", "/").lower())
                 for file_name in files:
-                    path = os.path.join(root, file_name)
-                    yield (path, _create_f_opener(path))
+                    path = root_path.relative_to(directory.replace("\\", "/").lower()) / file_name.lower()
+                    yield (path, self._create_f_opener(os.path.join(root, file_name)))
         for pak_file in self._paks:
             pak = vpk.open(pak_file)
-
-            def _create_pf_opener(p: str, m: Tuple[bytes, int, int, int, int, int]) -> Callable[[], AnyBinaryIO]:
-                return lambda: VPKFileIOWrapper(pak.get_vpkfile_instance(p, m))
-            for path, metadata in pak.read_index_iter():
-                yield (path, _create_pf_opener(path, metadata))
+            for pak_path, metadata in pak.read_index_iter():
+                path = PurePosixPath(pak_path.lower())
+                yield (path, self._create_pf_opener(pak_path, metadata, pak))
 
     def index_files(self) -> None:
         for path, open_func in self.index_files_iter():
-            self._tree[path.lower()] = open_func
+            self._index[path] = open_func
+            directory = path.parent
+            if directory not in self.tree:
+                self.tree[directory] = DirContents(set(), set())
+            self.tree[directory].files.add(path.name)
+            last_parent = directory
+            for parent in directory.parents:
+                if parent not in self.tree:
+                    self.tree[parent] = DirContents(set(), set())
+                self.tree[parent].dirs.add(last_parent.name)
+                last_parent = parent
 
     def clear_index(self) -> None:
-        self._tree.clear()
+        self._index.clear()
 
-    def open_file(self, path: str) -> AnyBinaryIO:
-        path = path.lower()
-        if path not in self._tree:
+    def open_file(self, path: Union[str, PurePosixPath]) -> AnyBinaryIO:
+        if isinstance(path, str):
+            path = PurePosixPath(path.lower())
+        if path not in self._index:
             raise FileNotFoundError(path)
-        return self._tree[path]()
+        return self._index[path]()
 
 
 _VECTOR_REGEX = re.compile(r"^\[(-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*)]$")
