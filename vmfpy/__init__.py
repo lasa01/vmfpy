@@ -240,7 +240,7 @@ class VMFOverlayEntity(VMFPointEntity):
         sides_value: str = data["sides"]
         if not isinstance(sides_value, str):
             raise ValueError("Invalid VMF file: overlay sides is not a str")
-        self.sides: List[int] = [int(s) for s in sides_value.split(" ")]
+        self.sides: List[int] = [int(s) for s in sides_value.split(" ") if s != ""]
         """Faces on which the overlay will be applied."""
 
         self.renderorder: Optional[int] = None
