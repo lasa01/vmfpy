@@ -85,6 +85,7 @@ class VMFFileSystem():
             root: str
             files: List[str]
             for root, _, files in os.walk(directory):
+                root = os.path.relpath(root, directory).replace("\\", "/")
                 for file_name in files:
                     path = os.path.join(root, file_name)
                     yield (path, _create_f_opener(path))
