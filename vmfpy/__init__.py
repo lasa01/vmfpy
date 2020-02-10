@@ -4,6 +4,7 @@ import os
 from pathlib import PurePosixPath
 import re
 from io import BufferedIOBase, TextIOBase, TextIOWrapper
+from collections.abc import Mapping
 from typing import List, Set, Dict, Callable, Iterator, Iterable, Tuple, Optional, NamedTuple, IO, Union, TypeVar, Any
 from typing import cast
 
@@ -66,7 +67,7 @@ class DirContents(NamedTuple):
     files: Set[str]
 
 
-class VMFFileSystem():
+class VMFFileSystem(Mapping[PurePosixPath, AnyBinaryIO]):
     """File system for opening game files."""
     def __init__(self) -> None:
         self._dirs: Set[str] = set()
@@ -132,6 +133,20 @@ class VMFFileSystem():
         if path not in self._index:
             raise FileNotFoundError(path)
         return self._index[path]()
+
+    def __getitem__(self, key: Union[str, PurePosixPath]) -> AnyBinaryIO:
+        if isinstance(key, str):
+            key = PurePosixPath(key.lower())
+        return self._index[key]()
+
+    def __len__(self) -> int:
+        return len(self._index)
+
+    def __iter__(self) -> Iterator[PurePosixPath]:
+        return iter(self._index)
+
+    def __contains__(self, item: object) -> bool:
+        return item in self._index
 
 
 class VMFParseException(Exception):
