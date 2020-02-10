@@ -5,7 +5,7 @@ with open("README.md", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="vmfpy",
-    version="0.1.1",
+    version="0.2.0",
     author="Lassi Säike",
     description="A Valve Map Format (VMF) parser",
     long_description=long_description,
@@ -13,7 +13,7 @@ setuptools.setup(
     url="https://github.com/lasa01/vmfpy",
     packages=["vmfpy"],
     classifiers=[
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
