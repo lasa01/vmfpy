@@ -4,7 +4,8 @@ import os
 from pathlib import PurePosixPath
 import re
 from io import BufferedIOBase, TextIOBase, TextIOWrapper
-from typing import List, Set, Dict, Callable, Iterator, Iterable, Tuple, Optional, NamedTuple, IO, Union, cast
+from typing import List, Set, Dict, Callable, Iterator, Iterable, Tuple, Optional, NamedTuple, IO, Union, TypeVar, Any
+from typing import cast
 
 
 # workaround for https://github.com/python/typeshed/issues/1229
@@ -133,6 +134,121 @@ class VMFFileSystem():
         return self._index[path]()
 
 
+class VMFParseException(Exception):
+    def __init__(self, msg: str, context: str = None):
+        super().__init__(f"VMF parsing failed: {msg}")
+        self.msg = msg
+        self._stack: List[str] = []
+        if context is not None:
+            self._stack.append(context)
+
+    def __str__(self) -> str:
+        return f"VMF parsing failed: {' '.join(reversed(self._stack))} {self.msg}"
+
+    def pushstack(self, msg: str, context: str = None) -> None:
+        self._stack.append(msg)
+        if context is not None:
+            self._stack.append(context)
+
+
+_RT = TypeVar("_RT")
+
+
+class _VMFParser():
+    def __init__(self) -> None:
+        self._context: Optional[str] = None
+
+    def _check_str(self, name: str, value: Union[str, dict], full_name: str = None) -> str:
+        if full_name is None:
+            full_name = name
+        if not isinstance(value, str):
+            raise VMFParseException(f"{name} is not a str", self._context)
+        return value
+
+    def _parse_str(self, name: str, vdict: dict, full_name: str = None) -> str:
+        if full_name is None:
+            full_name = name
+        if name not in vdict:
+            raise VMFParseException(f"{full_name} doesn't exist", self._context)
+        value = vdict[name]
+        return self._check_str(name, value, full_name)
+
+    def _parse_int(self, name: str, value: str) -> int:
+        try:
+            return int(value)
+        except ValueError:
+            raise VMFParseException(f"{name} is not a valid int", self._context)
+
+    def _parse_int_str(self, name: str, vdict: dict) -> int:
+        value = self._parse_str(name, vdict)
+        return self._parse_int(name, value)
+
+    def _parse_int_list(self, name: str, value: str) -> List[int]:
+        try:
+            return [int(s) for s in value.split(" ") if s != ""]
+        except ValueError:
+            raise VMFParseException(f"{name} contains an invalid int", self._context)
+
+    def _parse_int_list_str(self, name: str, vdict: dict) -> List[int]:
+        value = self._parse_str(name, vdict)
+        return self._parse_int_list(name, value)
+
+    def _parse_float(self, name: str, value: str) -> float:
+        try:
+            return float(value)
+        except ValueError:
+            raise VMFParseException(f"{name} is not a valid float", self._context)
+        except OverflowError:
+            raise VMFParseException(f"{name} is out of range", self._context)
+
+    def _parse_float_str(self, name: str, vdict: dict) -> float:
+        value = self._parse_str(name, vdict)
+        return self._parse_float(name, value)
+
+    def _parse_bool(self, name: str, vdict: dict) -> float:
+        intv = self._parse_int_str(name, vdict)
+        if intv not in (0, 1):
+            raise VMFParseException(f"{name} is not a valid bool", self._context)
+        return bool(intv)
+
+    def _check_dict(self, name: str, value: Union[str, dict]) -> vdf.VDFDict:
+        if not isinstance(value, vdf.VDFDict):
+            raise VMFParseException(f"{name} is not a dict", self._context)
+        return value
+
+    def _parse_dict(self, name: str, vdict: dict) -> vdf.VDFDict:
+        if name not in vdict:
+            raise VMFParseException(f"{name} doesn't exist", self._context)
+        value = vdict[name]
+        return self._check_dict(name, value)
+
+    def _iter_parse_matrix(self, name: str, vdict: dict) -> Iterator[Tuple[int, str, str]]:
+        value = self._parse_dict(name, vdict)
+        for row_name in value:
+            full_name = f"{name} {row_name}"
+            if row_name[:3] != "row":
+                raise VMFParseException(f"{name} contains invalid key", self._context)
+            try:
+                row_idx = int(row_name[3:])
+            except ValueError:
+                raise VMFParseException(f"{name} contains invalid row index", self._context)
+            row_value: str = value[row_name]
+            if not isinstance(row_value, str):
+                raise VMFParseException(f"{name} contains a non-str value", self._context)
+            yield (row_idx, row_value, full_name)
+
+    def _parse_custom(self, parser: Callable[..., _RT], name: str, *args: Any) -> _RT:
+        try:
+            return parser(*args)
+        except VMFParseException as e:
+            e.pushstack(name, self._context)
+            raise
+
+    def _parse_custom_str(self, parser: Callable[[str], _RT], name: str, vdict: dict) -> _RT:
+        value = self._parse_str(name, vdict)
+        return self._parse_custom(parser, name, value)
+
+
 _VECTOR_REGEX = re.compile(r"^\[(-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*)]$")
 
 
@@ -146,17 +262,35 @@ class VMFVector(NamedTuple):
     def parse_str(data: str) -> 'VMFVector':
         nums = data.split(" ")
         assert len(nums) == 3
-        return VMFVector(*(float(s) for s in nums))
+        if len(nums) != 3:
+            raise VMFParseException("vector doesn't contain 3 values")
+        try:
+            return VMFVector(*(float(s) for s in nums))
+        except ValueError:
+            raise VMFParseException("vector contains an invalid float")
+        except OverflowError:
+            raise VMFParseException("vector float out of range")
 
     @staticmethod
     def parse_sq_brackets(data: str) -> 'VMFVector':
         match = _VECTOR_REGEX.match(data)
-        assert match is not None
-        return VMFVector(*(float(s) for s in match.groups()))
+        if match is None:
+            raise VMFParseException("vector syntax is invalid (expected square-bracketed)")
+        try:
+            return VMFVector(*(float(s) for s in match.groups()))
+        except ValueError:
+            raise VMFParseException("vector contains an invalid float")
+        except OverflowError:
+            raise VMFParseException("vector float out of range")
 
     @staticmethod
     def parse_tuple(data: Tuple[str, str, str]) -> 'VMFVector':
-        return VMFVector(*(float(s) for s in data))
+        try:
+            return VMFVector(*(float(s) for s in data))
+        except ValueError:
+            raise VMFParseException("vector contains an invalid float")
+        except OverflowError:
+            raise VMFParseException("vector float out of range")
 
 
 class VMFColor(NamedTuple):
@@ -166,35 +300,34 @@ class VMFColor(NamedTuple):
     b: int
 
 
-class VMFEntity():
+class VMFEntity(_VMFParser):
     """An entity."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
+        super().__init__()
         self.data = data
         self.fs = fs
-        self.id = int(data["id"])
-        """This is a unique number among other entity ids."""
-        self.classname: str = data["classname"]
+        self.id = self._parse_int_str("id", data)
+        """This is a unique number among other entity ids ."""
+        self._context = f"(id {self.id})"
+        self.classname: str = self._parse_str("classname", data)
         """This is the name of the entity class."""
-        if not isinstance(self.classname, str):
-            raise ValueError("Invalid VMF file: entity classname is not a str")
+
         self.origin: Optional[VMFVector] = None
         """This is the point where the point entity exists."""
         if "origin" in data:
-            origin_value = data["origin"]
-            if not isinstance(origin_value, str):
-                raise ValueError("Invalid VMF file: entity origin is not a str")
-            self.origin = VMFVector.parse_str(origin_value)
+            self.origin = self._parse_custom_str(VMFVector.parse_str, "origin", data)
         self.spawnflags: Optional[int] = None
         """Indicates which flags are enabled on the entity."""
         if "spawnflags" in data:
-            self.spawnflags = int(data["spawnflags"])
+            self.spawnflags = self._parse_int_str("spawnflags", data)
 
 
 class VMFPointEntity(VMFEntity):
     """A point based entity."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         super().__init__(data, fs)
-        assert self.origin is not None
+        if self.origin is None:
+            raise VMFParseException("doesn't have an origin", self._context)
         self.origin: VMFVector
 
 
@@ -205,20 +338,15 @@ class VMFPropEntity(VMFPointEntity):
         self.angles: VMFVector
         """This entity's orientation in the world."""
         if "angles" in data:
-            angles_value = data["angles"]
-            if not isinstance(angles_value, str):
-                raise ValueError("Invalid VMF file: prop entity angles is not a str")
-            self.angles = VMFVector.parse_str(angles_value)
+            self.angles = self._parse_custom_str(VMFVector.parse_str, "angles", data)
         else:
             self.angles = VMFVector(0, 0, 0)
-        self.model = data["model"]
+        self.model = self._parse_str("model", data)
         """The model this entity should appear as."""
-        if not isinstance(self.model, str):
-            raise ValueError("Invalid VMF file: prop entity model is not a str")
         self.skin: int
         """Some models have multiple skins. This value selects from the index, starting with 0."""
         if "skin" in data:
-            self.skin = int(data["skin"])
+            self.skin = self._parse_int_str("skin", data)
         else:
             self.skin = 0
 
@@ -231,43 +359,40 @@ class VMFOverlayEntity(VMFPointEntity):
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         super().__init__(data, fs)
 
-        self.material = data["material"]
+        self.material = self._parse_str("material", data)
         """The material to overlay."""
-        if not isinstance(self.material, str):
-            raise ValueError("Invalid VMF file: overlay material is not a str")
         self.materialpath = "materials/" + self.material + ".vmt"
 
-        sides_value: str = data["sides"]
-        if not isinstance(sides_value, str):
-            raise ValueError("Invalid VMF file: overlay sides is not a str")
-        self.sides: List[int] = [int(s) for s in sides_value.split(" ") if s != ""]
+        self.sides = self._parse_int_list_str("sides", data)
         """Faces on which the overlay will be applied."""
 
         self.renderorder: Optional[int] = None
         """Higher values render after lower values (on top). This value can be 0–3."""
         if "RenderOrder" in data:
-            self.renderorder = int(data["RenderOrder"])
+            self.renderorder = self._parse_int_str("RenderOrder", data)
 
-        self.startu = float(data["StartU"])
+        self.startu = self._parse_float_str("StartU", data)
         """Texture coordinates for the image."""
-        self.startv = float(data["StartV"])
+        self.startv = self._parse_float_str("StartV", data)
         """Texture coordinates for the image."""
-        self.endu = float(data["EndU"])
+        self.endu = self._parse_float_str("EndU", data)
         """Texture coordinates for the image."""
-        self.endv = float(data["EndV"])
+        self.endv = self._parse_float_str("EndV", data)
         """Texture coordinates for the image."""
-        self.basisorigin = VMFVector.parse_str(data["BasisOrigin"])
+
+        self.basisorigin = self._parse_custom_str(VMFVector.parse_str, "BasisOrigin", data)
         """Offset of the surface from the position of the overlay entity."""
-        self.basisu = VMFVector.parse_str(data["BasisU"])
+        self.basisu = self._parse_custom_str(VMFVector.parse_str, "BasisU", data)
         """Direction of the material's X-axis."""
-        self.basisv = VMFVector.parse_str(data["BasisV"])
+        self.basisv = self._parse_custom_str(VMFVector.parse_str, "BasisV", data)
         """Direction of the material's Y-axis."""
-        self.basisnormal = VMFVector.parse_str(data["BasisNormal"])
+        self.basisnormal = self._parse_custom_str(VMFVector.parse_str, "BasisNormal", data)
         """Direction out of the surface."""
-        self.uv0 = VMFVector.parse_str(data["uv0"])
-        self.uv1 = VMFVector.parse_str(data["uv1"])
-        self.uv2 = VMFVector.parse_str(data["uv2"])
-        self.uv3 = VMFVector.parse_str(data["uv3"])
+
+        self.uv0 = self._parse_custom_str(VMFVector.parse_str, "uv0", data)
+        self.uv1 = self._parse_custom_str(VMFVector.parse_str, "uv1", data)
+        self.uv2 = self._parse_custom_str(VMFVector.parse_str, "uv2", data)
+        self.uv3 = self._parse_custom_str(VMFVector.parse_str, "uv3", data)
 
     def open_material_file(self) -> TextIOWrapper:
         return TextIOWrapper(cast(IO[bytes],
@@ -279,50 +404,48 @@ class VMFLightEntity(VMFPointEntity):
     """Creates an invisible, static light source that shines in all directions."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         super().__init__(data, fs)
-        light_value: str = data["_light"]
-        if not isinstance(light_value, str):
-            raise ValueError("Invalid VMF file: light _light is not a str")
-        light_list = [int(s) for s in light_value.split(" ")]
+        light_list = self._parse_int_list_str("_light", data)
+        if len(light_list) != 4:
+            raise VMFParseException("_light doesn't have 4 values", self._context)
         self.color = VMFColor(*light_list[:3])
         """The RGB color of the light."""
         self.brightness = light_list[3]
         """The brightness of the light."""
 
-        light_hdr_value: str = data["_lightHDR"]
-        if not isinstance(light_hdr_value, str):
-            raise ValueError("Invalid VMF file: light _lightHDR is not a str")
-        light_hdr_list = [int(s) for s in light_value.split(" ")]
+        light_hdr_list = self._parse_int_list_str("_lightHDR", data)
+        if len(light_list) != 4:
+            raise VMFParseException("_lightHDR doesn't have 4 values", self._context)
         self.hdr_color = VMFColor(*light_hdr_list[:3])
         """Color override used in HDR mode. Default is -1 -1 -1 which means no change."""
         self.hdr_brightness = light_hdr_list[3]
         """Brightness override used in HDR mode. Default is 1 which means no change."""
-        self.hdr_scale = float(data["_lightscaleHDR"])
+        self.hdr_scale = self._parse_float_str("_lightscaleHDR", data)
         """A simple intensity multiplier used when compiling HDR lighting."""
 
         self.style: Optional[int] = None
         """Various Custom Appearance presets."""
         if "style" in data:
-            self.style = int(data["style"])
+            self.style = self._parse_int_str("style", data)
         self.constant_attn: Optional[float] = None
         """Determines how the intensity of the emitted light falls off over distance."""
         if "_constant_attn" in data:
-            self.constant_attn = float(data["_constant_attn"])
+            self.constant_attn = self._parse_float_str("_constant_attn", data)
         self.linear_attn: Optional[float] = None
         """Determines how the intensity of the emitted light falls off over distance."""
         if "_linear_attn" in data:
-            self.linear_attn = float(data["_linear_attn"])
+            self.linear_attn = self._parse_float_str("_linear_attn", data)
         self.quadratic_attn: Optional[float] = None
         """Determines how the intensity of the emitted light falls off over distance."""
         if "_quadratic_attn" in data:
-            self.quadratic_attn = float(data["_quadratic_attn"])
+            self.quadratic_attn = self._parse_float_str("_quadratic_attn", data)
         self.fifty_percent_distance: Optional[float] = None
         """Distance at which brightness should have fallen to 50%. Overrides attn if non-zero."""
         if "_fifty_percent_distance" in data:
-            self.fifty_percent_distance = float(data["_fifty_percent_distance"])
+            self.fifty_percent_distance = self._parse_float_str("_fifty_percent_distance", data)
         self.zero_percent_distance: Optional[float] = None
         """Distance at which brightness should have fallen to (1/256)%. Overrides attn if non-zero."""
         if "_zero_percent_distance" in data:
-            self.zero_percent_distance = float(data["_zero_percent_distance"])
+            self.zero_percent_distance = self._parse_float_str("_zero_percent_distance", data)
 
 
 class VMFSpotLightEntity(VMFLightEntity):
@@ -332,20 +455,17 @@ class VMFSpotLightEntity(VMFLightEntity):
         self.angles: VMFVector
         """This entity's orientation in the world."""
         if "angles" in data:
-            angles_value = data["angles"]
-            if not isinstance(angles_value, str):
-                raise ValueError("Invalid VMF file: prop entity angles is not a str")
-            self.angles = VMFVector.parse_str(angles_value)
+            self.angles = self._parse_custom_str(VMFVector.parse_str, "angles", data)
         else:
             self.angles = VMFVector(0, 0, 0)
-        self.pitch = float(data["pitch"])
+        self.pitch = self._parse_float_str("pitch", data)
         """Used instead of angles value for reasons unknown."""
 
-        self.inner_cone = int(data["_inner_cone"])
+        self.inner_cone = self._parse_int_str("_inner_cone", data)
         """The angle of the inner spotlight beam."""
-        self.cone = int(data["_cone"])
+        self.cone = self._parse_int_str("_cone", data)
         """The angle of the outer spotlight beam."""
-        self.exponent = int(data["_exponent"])
+        self.exponent = self._parse_int_str("_exponent", data)
         """Changes the distance between the umbra and penumbra cone."""
 
 
@@ -356,36 +476,31 @@ class VMFEnvLightEntity(VMFLightEntity):
         self.angles: VMFVector
         """This entity's orientation in the world."""
         if "angles" in data:
-            angles_value = data["angles"]
-            if not isinstance(angles_value, str):
-                raise ValueError("Invalid VMF file: prop entity angles is not a str")
-            self.angles = VMFVector.parse_str(angles_value)
+            self.angles = self._parse_custom_str(VMFVector.parse_str, "angles", data)
         else:
             self.angles = VMFVector(0, 0, 0)
-        self.pitch = float(data["pitch"])
+        self.pitch = self._parse_float_str("pitch", data)
         """Used instead of angles value for reasons unknown."""
 
-        amb_light_value: str = data["_ambient"]
-        if not isinstance(amb_light_value, str):
-            raise ValueError("Invalid VMF file: light _ambient is not a str")
-        amb_light_list = [int(s) for s in amb_light_value.split(" ")]
+        amb_light_list = self._parse_int_list_str("_ambient", data)
+        if len(amb_light_list) != 4:
+            raise VMFParseException("_ambient doesn't have 4 values", self._context)
         self.amb_color = VMFColor(*amb_light_list[:3])
         """Color of the diffuse skylight."""
         self.amb_brightness = amb_light_list[3]
         """Brightness of the diffuse skylight."""
 
-        amb_light_hdr_value: str = data["_ambientHDR"]
-        if not isinstance(amb_light_hdr_value, str):
-            raise ValueError("Invalid VMF file: light _ambientHDR is not a str")
-        amb_light_hdr_list = [int(s) for s in amb_light_value.split(" ")]
+        amb_light_hdr_list = self._parse_int_list_str("_ambientHDR", data)
+        if len(amb_light_hdr_list) != 4:
+            raise VMFParseException("_ambientHDR doesn't have 4 values", self._context)
         self.amb_hdr_color = VMFColor(*amb_light_hdr_list[:3])
         """Override for ambient color when compiling HDR lighting."""
         self.amb_hdr_brightness = amb_light_hdr_list[3]
         """Override for ambient brightness when compiling HDR lighting."""
-        self.amb_hdr_scale = float(data["_AmbientScaleHDR"])
+        self.amb_hdr_scale = self._parse_float_str("_AmbientScaleHDR", data)
         """Amount to scale the ambient light by when compiling for HDR."""
 
-        self.sun_spread_angle = float(data["SunSpreadAngle"])
+        self.sun_spread_angle = self._parse_float_str("SunSpreadAngle", data)
         """The angular extent of the sun for casting soft shadows."""
 
 
@@ -403,8 +518,14 @@ class VMFPlane(NamedTuple):
     @staticmethod
     def parse(data: str) -> 'VMFPlane':
         match = _PLANE_REGEX.match(data)
-        assert match is not None
-        floats = [float(s) for s in match.groups()]
+        if match is None:
+            raise VMFParseException("plane syntax is invalid")
+        try:
+            floats = [float(s) for s in match.groups()]
+        except ValueError:
+            raise VMFParseException("plane contains an invalid float")
+        except OverflowError:
+            raise VMFParseException("plane float out of range")
         return VMFPlane(VMFVector(*floats[:3]),
                         VMFVector(*floats[3:6]),
                         VMFVector(*floats[6:9]))
@@ -425,163 +546,112 @@ class VMFAxis(NamedTuple):
     @staticmethod
     def parse(data: str) -> 'VMFAxis':
         match = _AXIS_REGEX.match(data)
-        assert match is not None
-        floats = [float(s) for s in match.groups()]
+        if match is None:
+            raise VMFParseException("axis syntax is invalid")
+        try:
+            floats = [float(s) for s in match.groups()]
+        except ValueError:
+            raise VMFParseException("axis contains an invalid float")
+        except OverflowError:
+            raise VMFParseException("axis float out of range")
         return VMFAxis(*floats)
 
 
-class VMFDispInfo():
+class VMFDispInfo(_VMFParser):
     """Deals with all the information for a displacement map."""
     def __init__(self, data: vdf.VDFDict):
-        self.power = int(data["power"])
+        super().__init__()
+        self.power = self._parse_int_str("power", data)
         """Used to calculate the number of rows and columns."""
         self.triangle_dimension = 2 ** self.power
         """The number of rows and columns in triangles."""
         self.dimension = self.triangle_dimension + 1
         """The number of rows and columns in vertexes."""
-        self.startposition = VMFVector.parse_sq_brackets(data["startposition"])
+        self.startposition = self._parse_custom_str(VMFVector.parse_sq_brackets, "startposition", data)
         """The position of the bottom left corner in an actual x y z position."""
-        self.elevation = float(data["elevation"])
+        self.elevation = self._parse_float_str("elevation", data)
         """A universal displacement in the direction of the vertex's normal added to all of the points."""
-        self.subdiv = bool(int(data["subdiv"]))
+        self.subdiv = self._parse_bool("subdiv", data)
         """Marks whether or not the displacement is being subdivided."""
 
-        normals_dict: vdf.VDFDict = data["normals"]
-        if not isinstance(normals_dict, vdf.VDFDict):
-            raise ValueError("Invalid VMF file: dispinfo normals is not a dict")
         self.normals: List[List[VMFVector]] = [[VMFVector(0, 0, 0)] * self.dimension] * self.dimension
         """Defines the normal line for each vertex."""
-        for row_name in normals_dict:
-            if row_name[:3] != "row":
-                raise ValueError("Invalid VMF file: invalid key in dispinfo normals")
-            row_idx = int(row_name[3:])
-            row_value: str = normals_dict[row_name]
-            if not isinstance(row_value, str):
-                raise ValueError("Invalid VMF file: a value in dispinfo normals is not a str")
+        for row_idx, row_value, row_name in self._iter_parse_matrix("normals", data):
             row_nums_it = iter(row_value.split(" "))
             vec_tuple: Tuple[str, str, str]
             for idx, vec_tuple in enumerate(zip(row_nums_it, row_nums_it, row_nums_it)):
-                self.normals[row_idx][idx] = VMFVector.parse_tuple(vec_tuple)
+                self.normals[row_idx][idx] = self._parse_custom(VMFVector.parse_tuple, row_name, vec_tuple)
 
-        distances_dict: vdf.VDFDict = data["distances"]
-        if not isinstance(distances_dict, vdf.VDFDict):
-            raise ValueError("Invalid VMF file: dispinfo distances is not a dict")
         self.distances: List[List[float]] = [[0.] * self.dimension] * self.dimension
         """The distance values represent how much the vertex is moved along the normal line."""
-        for row_name in distances_dict:
-            if row_name[:3] != "row":
-                raise ValueError("Invalid VMF file: invalid key in dispinfo distances")
-            row_idx = int(row_name[3:])
-            row_value = distances_dict[row_name]
-            if not isinstance(row_value, str):
-                raise ValueError("Invalid VMF file: a value in dispinfo distances is not a str")
+        for row_idx, row_value, row_name in self._iter_parse_matrix("distances", data):
             for idx, num_str in enumerate(row_value.split(" ")):
-                self.distances[row_idx][idx] = float(num_str)
+                self.distances[row_idx][idx] = self._parse_float(row_name, num_str)
 
-        offsets_dict: vdf.VDFDict = data["offsets"]
-        if not isinstance(offsets_dict, vdf.VDFDict):
-            raise ValueError("Invalid VMF file: dispinfo offsets is not a dict")
         self.offsets: List[List[VMFVector]] = [[VMFVector(0, 0, 0)] * self.dimension] * self.dimension
         """Lists all the default positions for each vertex in a displacement map."""
-        for row_name in offsets_dict:
-            if row_name[:3] != "row":
-                raise ValueError("Invalid VMF file: invalid key in dispinfo offsets")
-            row_idx = int(row_name[3:])
-            row_value = offsets_dict[row_name]
-            if not isinstance(row_value, str):
-                raise ValueError("Invalid VMF file: a value in dispinfo offsets is not a str")
+        for row_idx, row_value, row_name in self._iter_parse_matrix("offsets", data):
             row_nums_it = iter(row_value.split(" "))
             for idx, vec_tuple in enumerate(zip(row_nums_it, row_nums_it, row_nums_it)):
-                self.offsets[row_idx][idx] = VMFVector.parse_tuple(vec_tuple)
-        offset_normals_dict: vdf.VDFDict = data["offset_normals"]
-        if not isinstance(offset_normals_dict, vdf.VDFDict):
-            raise ValueError("Invalid VMF file: dispinfo offset_normals is not a dict")
+                self.offsets[row_idx][idx] = self._parse_custom(VMFVector.parse_tuple, row_name, vec_tuple)
+
         self.offset_normals: List[List[VMFVector]] = [[VMFVector(0, 0, 0)] * self.dimension] * self.dimension
         """Defines the default normal lines that the normals are based from."""
-        for row_name in offset_normals_dict:
-            if row_name[:3] != "row":
-                raise ValueError("Invalid VMF file: invalid key in dispinfo offset_normals")
-            row_idx = int(row_name[3:])
-            row_value = offset_normals_dict[row_name]
-            if not isinstance(row_value, str):
-                raise ValueError("Invalid VMF file: a value in dispinfo offset_normals is not a str")
+        for row_idx, row_value, row_name in self._iter_parse_matrix("offset_normals", data):
             row_nums_it = iter(row_value.split(" "))
             for idx, vec_tuple in enumerate(zip(row_nums_it, row_nums_it, row_nums_it)):
-                self.offset_normals[row_idx][idx] = VMFVector.parse_tuple(vec_tuple)
+                self.offset_normals[row_idx][idx] = self._parse_custom(VMFVector.parse_tuple, row_name, vec_tuple)
 
-        alphas_dict: vdf.VDFDict = data["alphas"]
-        if not isinstance(alphas_dict, vdf.VDFDict):
-            raise ValueError("Invalid VMF file: dispinfo alphas is not a dict")
         self.alphas: List[List[float]] = [[0] * self.dimension] * self.dimension
         """Contains a value for each vertex that represents how much of which texture to shown in blended materials."""
-        for row_name in alphas_dict:
-            if row_name[:3] != "row":
-                raise ValueError("Invalid VMF file: invalid key in dispinfo alphas")
-            row_idx = int(row_name[3:])
-            row_value = alphas_dict[row_name]
-            if not isinstance(row_value, str):
-                raise ValueError("Invalid VMF file: a value in dispinfo alphas is not a str")
+        for row_idx, row_value, row_name in self._iter_parse_matrix("alphas", data):
             for idx, num_str in enumerate(row_value.split(" ")):
-                self.alphas[row_idx][idx] = float(num_str)
+                self.alphas[row_idx][idx] = self._parse_float(row_name, num_str)
 
-        triangle_tags_dict: vdf.VDFDict = data["triangle_tags"]
-        if not isinstance(triangle_tags_dict, vdf.VDFDict):
-            raise ValueError("Invalid VMF file: dispinfo triangle_tags is not a dict")
         self.triangle_tags: List[List[Tuple[int, int]]] = [[(0, 0)] * self.triangle_dimension] * self.triangle_dimension
         """Contains information specific to each triangle in the displacement."""
-        for row_name in triangle_tags_dict:
-            if row_name[:3] != "row":
-                raise ValueError("Invalid VMF file: invalid key in dispinfo triangle_tags")
-            row_idx = int(row_name[3:])
-            row_value = triangle_tags_dict[row_name]
-            if not isinstance(row_value, str):
-                raise ValueError("Invalid VMF file: a value in dispinfo triangle_tags is not a str")
+        for row_idx, row_value, row_name in self._iter_parse_matrix("triangle_tags", data):
             row_nums_it = iter(row_value.split(" "))
             for idx, tag_tuple in enumerate(zip(row_nums_it, row_nums_it)):
-                self.triangle_tags[row_idx][idx] = (int(tag_tuple[0]), int(tag_tuple[1]))
+                self.triangle_tags[row_idx][idx] = (self._parse_int(row_name, tag_tuple[0]),
+                                                    self._parse_int(row_name, tag_tuple[1]))
 
-        allowed_verts_dict: vdf.VDFDict = data["allowed_verts"]
-        if not isinstance(allowed_verts_dict, vdf.VDFDict):
-            raise ValueError("Invalid VMF file: dispinfo allowed_verts is not a dict")
-        allowed_verts_value = allowed_verts_dict["10"]
-        if not isinstance(allowed_verts_value, str):
-            raise ValueError("Invalid VMF file: value of allowed_verts 10 is not a str")
-        self.allowed_verts = tuple((int(s) for s in allowed_verts_value.split(" ")))
+        allowed_verts_dict = self._parse_dict("allowed_verts", data)
+        allowed_verts_value = self._parse_str("10", allowed_verts_dict, "allowed_verts 10")
+        self.allowed_verts = tuple(self._parse_int_list("allowed_verts 10", allowed_verts_value))
         """This states which vertices share an edge with another displacement map, but not a vertex."""
 
 
-class VMFSide():
+class VMFSide(_VMFParser):
     """Defines all the data relevant to one side and just to that side."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
+        super().__init__()
         self.fs = fs
         """File system for opening game files."""
-        self.id = int(data["id"])
+        self.id = self._parse_int_str("id", data)
         """A unique value among other sides ids."""
-        self.plane = VMFPlane.parse(data["plane"])
+        self._context = f"(id {self.id})"
+        self.plane = self._parse_custom_str(VMFPlane.parse, "plane", data)
         """Defines the orientation of the face."""
-        self.material = data["material"]
+        self.material = self._parse_str("material", data)
         """The directory and name of the texture the side has applied to it."""
-        if not isinstance(self.material, str):
-            raise ValueError("Invalid VMF file: side material is not a str")
         self.materialpath = "materials/" + self.material + ".vmt"
-        self.uaxis = VMFAxis.parse(data["uaxis"])
+        self.uaxis = self._parse_custom_str(VMFAxis.parse, "uaxis", data)
         """The u-axis and v-axis are the texture specific axes."""
-        self.vaxis = VMFAxis.parse(data["vaxis"])
+        self.uaxis = self._parse_custom_str(VMFAxis.parse, "vaxis", data)
         """The u-axis and v-axis are the texture specific axes."""
-        self.rotation = float(data["rotation"])
+        self.rotation = self._parse_float_str("rotation", data)
         """The rotation of the given texture on the side."""
-        self.lightmapscale = int(data["lightmapscale"])
+        self.lightmapscale = self._parse_int_str("lightmapscale", data)
         """The light map resolution on the face."""
-        self.smoothing_groups = int(data["smoothing_groups"]).to_bytes(4, 'little')
+        self.smoothing_groups = self._parse_int_str("smoothing_groups", data).to_bytes(4, 'little')
         """"Select a smoothing group to use for lighting on the face."""
 
         self.dispinfo: Optional[VMFDispInfo] = None
         """Deals with all the information for a displacement map."""
         if "dispinfo" in data:
-            dispinfo_dict = data["dispinfo"]
-            if not isinstance(dispinfo_dict, vdf.VDFDict):
-                raise ValueError("Invalid VMF file: side dispinfo is not a dict")
-            self.dispinfo = VMFDispInfo(dispinfo_dict)
+            dispinfo_dict = self._parse_dict("dispinfo", data)
+            self.dispinfo = self._parse_custom(VMFDispInfo, "dispinfo", dispinfo_dict)
 
     def open_material_file(self) -> TextIOWrapper:
         return TextIOWrapper(cast(IO[bytes],
@@ -589,19 +659,19 @@ class VMFSide():
                              encoding='utf-8')
 
 
-class VMFSolid():
+class VMFSolid(_VMFParser):
     """Represents 1 single brush in Hammer."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         self.fs = fs
         """File system for opening game files."""
-        self.id = int(data["id"])
+        self.id = self._parse_int_str("id", data)
         """A unique value among other solids' IDs."""
+        self._context = f"(id {self.id})"
         dict_sides = data.get_all_for("side")
         self.sides: List[VMFSide] = list()
         for side in dict_sides:
-            if not isinstance(side, vdf.VDFDict):
-                raise ValueError("Invalid VMF file: a solid side is not a dict")
-            self.sides.append(VMFSide(side, self.fs))
+            side = self._check_dict("side", side)
+            self.sides.append(self._parse_custom(VMFSide, "side", side, self.fs))
 
 
 class VMFBrushEntity(VMFEntity):
@@ -611,20 +681,18 @@ class VMFBrushEntity(VMFEntity):
         dict_solids = data.get_all_for("solid")
         self.solids: List[VMFSolid] = list()
         for solid in dict_solids:
-            if not isinstance(solid, vdf.VDFDict):
-                raise ValueError("Invalid VMF file: a solid is not a dict")
-            self.solids.append(VMFSolid(solid, self.fs))
+            solid = self._check_dict("solid", solid)
+            self.solids.append(self._parse_custom(VMFSolid, "solid", solid, self.fs))
 
 
 class VMFWorldEntity(VMFBrushEntity):
     """Contains all the world brush information for Hammer."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         super().__init__(data, fs)
-        assert self.classname == "worldspawn"
-        self.skyname = data["skyname"]
+        if self.classname != "worldspawn":
+            raise VMFParseException("classname is not worldspawn")
+        self.skyname = self._parse_str("skyname", data)
         """The name of the skybox to be used."""
-        if not isinstance(self.skyname, str):
-            raise ValueError("Invalid VMF file: world skyname is not a str")
         self.skypath = "materials/skybox/" + self.skyname + ".vmt"
 
     def open_sky(self) -> TextIOWrapper:
@@ -633,8 +701,9 @@ class VMFWorldEntity(VMFBrushEntity):
                              encoding='utf-8')
 
 
-class VMF():
-    def __init__(self, file: AnyTextIO, data_dirs: Iterable[str] = [], data_paks: Iterable[str] = []):
+class VMF(_VMFParser):
+    def __init__(self, file: AnyTextIO, data_dirs: Iterable[str] = (), data_paks: Iterable[str] = ()):
+        super().__init__()
         self.fs = VMFFileSystem()
         """File system for opening game files."""
         for data_dir in data_dirs:
@@ -644,22 +713,18 @@ class VMF():
         self.fs.index_files()
         vdf_dict = vdf.load(file, mapper=vdf.VDFDict, merge_duplicate_keys=False, escaped=False)
 
-        versioninfo: vdf.VDFDict = vdf_dict["versioninfo"]
-        if not isinstance(versioninfo, vdf.VDFDict):
-            raise ValueError("Invalid VMF file: versioninfo is not a dict")
-        self.editorversion = int(versioninfo["editorversion"])
+        versioninfo = self._parse_dict("versioninfo", vdf_dict)
+        self.editorversion = self._parse_int_str("editorversion", versioninfo)
         """The version of Hammer used to create the file, version 4.00 is "400"."""
-        self.editorbuild = int(versioninfo["editorbuild"])
+        self.editorbuild = self._parse_int_str("editorbuild", versioninfo)
         """The patch number of Hammer the file was generated with."""
-        self.mapversion = int(versioninfo["mapversion"])
+        self.mapversion = self._parse_int_str("mapversion", versioninfo)
         """This represents how many times you've saved the file, useful for comparing old or new versions."""
-        self.prefab = bool(int(versioninfo["prefab"]))
+        self.prefab = self._parse_bool("prefab", versioninfo)
         """Whether this is a full map or simply a collection of prefabricated objects."""
 
-        world_dict: vdf.VDFDict = vdf_dict["world"]
-        if not isinstance(world_dict, vdf.VDFDict):
-            raise ValueError("Invalid VMF file: world is not a dict")
-        self.world = VMFWorldEntity(world_dict, self.fs)
+        world_dict = self._parse_dict("world", vdf_dict)
+        self.world = self._parse_custom(VMFWorldEntity, "world", world_dict, self.fs)
         """"Contains all the world brush information for Hammer."""
 
         self.entities: List[VMFEntity] = list()
@@ -679,32 +744,29 @@ class VMF():
 
         dict_entities = vdf_dict.get_all_for("entity")
         for entity in dict_entities:
-            if not isinstance(entity, vdf.VDFDict):
-                raise ValueError("Invalid VMF file: entity is not a dict")
-            classname: str = entity["classname"]
-            if not isinstance(classname, str):
-                raise ValueError("Invalid VMF file: entity classname is not a str")
+            entity = self._check_dict("entity", entity)
+            classname = self._parse_str("classname", entity, "entity classname")
             entity_inst: VMFEntity
             if classname == "info_overlay":
-                entity_inst = VMFOverlayEntity(entity, self.fs)
+                entity_inst = self._parse_custom(VMFOverlayEntity, "entity (info_overlay)", entity, self.fs)
                 self.overlay_entities.append(entity_inst)
             elif classname == "light_environment":
-                entity_inst = VMFEnvLightEntity(entity, self.fs)
+                entity_inst = self._parse_custom(VMFEnvLightEntity, "entity (light_environment)", entity, self.fs)
                 self.env_light_entity = entity_inst
             elif classname == "light_spot":
-                entity_inst = VMFSpotLightEntity(entity, self.fs)
+                entity_inst = self._parse_custom(VMFSpotLightEntity, "entity (light_spot)", entity, self.fs)
                 self.spot_light_entities.append(entity_inst)
             elif classname.startswith("light"):
-                entity_inst = VMFLightEntity(entity, self.fs)
+                entity_inst = self._parse_custom(VMFLightEntity, "entity (light)", entity, self.fs)
                 self.light_entities.append(entity_inst)
             elif classname.startswith("func"):
-                entity_inst = VMFBrushEntity(entity, self.fs)
+                entity_inst = self._parse_custom(VMFBrushEntity, "entity (func)", entity, self.fs)
                 self.func_entities.append(entity_inst)
             elif classname.startswith("prop"):
-                entity_inst = VMFPropEntity(entity, self.fs)
+                entity_inst = self._parse_custom(VMFPropEntity, "entity (prop)", entity, self.fs)
                 self.prop_entities.append(entity_inst)
             elif "origin" in entity:
-                entity_inst = VMFPointEntity(entity, self.fs)
+                entity_inst = self._parse_custom(VMFPointEntity, "entity", entity, self.fs)
             else:
-                entity_inst = VMFEntity(entity, self.fs)
+                entity_inst = self._parse_custom(VMFEntity, "entity", entity, self.fs)
             self.entities.append(entity_inst)
