@@ -69,11 +69,13 @@ class DirContents(NamedTuple):
 
 class VMFFileSystem(Mapping[PurePosixPath, AnyBinaryIO]):
     """File system for opening game files."""
-    def __init__(self) -> None:
-        self._dirs: Set[str] = set()
-        self._paks: Set[str] = set()
+    def __init__(self, dirs: Iterable[str] = None, paks: Iterable[str] = None, index_files: bool = False) -> None:
+        self._dirs: Set[str] = set() if dirs is None else set(dirs)
+        self._paks: Set[str] = set() if paks is None else set(paks)
         self._index: Dict[PurePosixPath, Callable[[], AnyBinaryIO]] = dict()
         self.tree: Dict[PurePosixPath, DirContents] = dict()
+        if index_files:
+            self.index_files()
 
     def add_dir(self, path: str) -> None:
         self._dirs.add(path)
