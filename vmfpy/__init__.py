@@ -223,7 +223,7 @@ class _VMFParser():
         value = self._parse_str(name, vdict)
         return self._parse_float(name, value)
 
-    def _parse_bool(self, name: str, vdict: dict) -> float:
+    def _parse_bool(self, name: str, vdict: dict) -> bool:
         intv = self._parse_int_str(name, vdict)
         if intv not in (0, 1):
             raise VMFParseException(f"{name} is not a valid bool", self._context)
@@ -398,19 +398,19 @@ class VMFOverlayEntity(VMFPointEntity):
         self.endv = self._parse_float_str("EndV", data)
         """Texture coordinates for the image."""
 
-        self.basisorigin = self._parse_custom_str(VMFVector.parse_str, "BasisOrigin", data)
+        self.basisorigin: VMFVector = self._parse_custom_str(VMFVector.parse_str, "BasisOrigin", data)
         """Offset of the surface from the position of the overlay entity."""
-        self.basisu = self._parse_custom_str(VMFVector.parse_str, "BasisU", data)
+        self.basisu: VMFVector = self._parse_custom_str(VMFVector.parse_str, "BasisU", data)
         """Direction of the material's X-axis."""
-        self.basisv = self._parse_custom_str(VMFVector.parse_str, "BasisV", data)
+        self.basisv: VMFVector = self._parse_custom_str(VMFVector.parse_str, "BasisV", data)
         """Direction of the material's Y-axis."""
-        self.basisnormal = self._parse_custom_str(VMFVector.parse_str, "BasisNormal", data)
+        self.basisnormal: VMFVector = self._parse_custom_str(VMFVector.parse_str, "BasisNormal", data)
         """Direction out of the surface."""
 
-        self.uv0 = self._parse_custom_str(VMFVector.parse_str, "uv0", data)
-        self.uv1 = self._parse_custom_str(VMFVector.parse_str, "uv1", data)
-        self.uv2 = self._parse_custom_str(VMFVector.parse_str, "uv2", data)
-        self.uv3 = self._parse_custom_str(VMFVector.parse_str, "uv3", data)
+        self.uv0: VMFVector = self._parse_custom_str(VMFVector.parse_str, "uv0", data)
+        self.uv1: VMFVector = self._parse_custom_str(VMFVector.parse_str, "uv1", data)
+        self.uv2: VMFVector = self._parse_custom_str(VMFVector.parse_str, "uv2", data)
+        self.uv3: VMFVector = self._parse_custom_str(VMFVector.parse_str, "uv3", data)
 
     def open_material_file(self) -> TextIOWrapper:
         return TextIOWrapper(cast(IO[bytes],
@@ -585,7 +585,7 @@ class VMFDispInfo(_VMFParser):
         """The number of rows and columns in triangles."""
         self.dimension = self.triangle_dimension + 1
         """The number of rows and columns in vertexes."""
-        self.startposition = self._parse_custom_str(VMFVector.parse_sq_brackets, "startposition", data)
+        self.startposition: VMFVector = self._parse_custom_str(VMFVector.parse_sq_brackets, "startposition", data)
         """The position of the bottom left corner in an actual x y z position."""
         self.elevation = self._parse_float_str("elevation", data)
         """A universal displacement in the direction of the vertex's normal added to all of the points."""
@@ -649,14 +649,14 @@ class VMFSide(_VMFParser):
         self.id = self._parse_int_str("id", data)
         """A unique value among other sides ids."""
         self._context = f"(id {self.id})"
-        self.plane = self._parse_custom_str(VMFPlane.parse, "plane", data)
+        self.plane: VMFPlane = self._parse_custom_str(VMFPlane.parse, "plane", data)
         """Defines the orientation of the face."""
         self.material = self._parse_str("material", data)
         """The directory and name of the texture the side has applied to it."""
         self.materialpath = "materials/" + self.material + ".vmt"
-        self.uaxis = self._parse_custom_str(VMFAxis.parse, "uaxis", data)
+        self.uaxis: VMFAxis = self._parse_custom_str(VMFAxis.parse, "uaxis", data)
         """The u-axis and v-axis are the texture specific axes."""
-        self.uaxis = self._parse_custom_str(VMFAxis.parse, "vaxis", data)
+        self.vaxis: VMFAxis = self._parse_custom_str(VMFAxis.parse, "vaxis", data)
         """The u-axis and v-axis are the texture specific axes."""
         self.rotation = self._parse_float_str("rotation", data)
         """The rotation of the given texture on the side."""
@@ -742,7 +742,7 @@ class VMF(_VMFParser):
         """Whether this is a full map or simply a collection of prefabricated objects."""
 
         world_dict = self._parse_dict("world", vdf_dict)
-        self.world = self._parse_custom(VMFWorldEntity, "world", world_dict, self.fs)
+        self.world: VMFWorldEntity = self._parse_custom(VMFWorldEntity, "world", world_dict, self.fs)
         """"Contains all the world brush information for Hammer."""
 
         self.entities: List[VMFEntity] = list()
