@@ -4,7 +4,7 @@ import os
 from pathlib import PurePosixPath
 import re
 from io import BufferedIOBase, TextIOBase, TextIOWrapper
-from collections.abc import Mapping
+from typing import Mapping
 from typing import List, Set, Dict, Callable, Iterator, Iterable, Tuple, Optional, NamedTuple, IO, Union, TypeVar, Any
 from typing import cast
 
