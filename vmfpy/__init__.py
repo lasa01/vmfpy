@@ -126,6 +126,7 @@ class VMFFileSystem(Mapping[PurePosixPath, AnyBinaryIO]):
 
     def clear_index(self) -> None:
         self._index.clear()
+        self.tree.clear()
 
     def open_file(self, path: Union[str, PurePosixPath]) -> AnyBinaryIO:
         if isinstance(path, str):
