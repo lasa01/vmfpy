@@ -592,7 +592,8 @@ class VMFDispInfo(_VMFParser):
         self.subdiv = self._parse_bool("subdiv", data)
         """Marks whether or not the displacement is being subdivided."""
 
-        self.normals: List[List[VMFVector]] = [[VMFVector(0, 0, 0)] * self.dimension] * self.dimension
+        self.normals: List[List[VMFVector]] = [[VMFVector(0, 0, 0) for _ in range(self.dimension)]
+                                               for _ in range(self.dimension)]
         """Defines the normal line for each vertex."""
         for row_idx, row_value, row_name in self._iter_parse_matrix("normals", data):
             row_nums_it = iter(row_value.split(" "))
@@ -600,33 +601,36 @@ class VMFDispInfo(_VMFParser):
             for idx, vec_tuple in enumerate(zip(row_nums_it, row_nums_it, row_nums_it)):
                 self.normals[row_idx][idx] = self._parse_custom(VMFVector.parse_tuple, row_name, vec_tuple)
 
-        self.distances: List[List[float]] = [[0.] * self.dimension] * self.dimension
+        self.distances: List[List[float]] = [[0 for _ in range(self.dimension)] for _ in range(self.dimension)]
         """The distance values represent how much the vertex is moved along the normal line."""
         for row_idx, row_value, row_name in self._iter_parse_matrix("distances", data):
             for idx, num_str in enumerate(row_value.split(" ")):
                 self.distances[row_idx][idx] = self._parse_float(row_name, num_str)
 
-        self.offsets: List[List[VMFVector]] = [[VMFVector(0, 0, 0)] * self.dimension] * self.dimension
+        self.offsets: List[List[VMFVector]] = [[VMFVector(0, 0, 0) for _ in range(self.dimension)]
+                                               for _ in range(self.dimension)]
         """Lists all the default positions for each vertex in a displacement map."""
         for row_idx, row_value, row_name in self._iter_parse_matrix("offsets", data):
             row_nums_it = iter(row_value.split(" "))
             for idx, vec_tuple in enumerate(zip(row_nums_it, row_nums_it, row_nums_it)):
                 self.offsets[row_idx][idx] = self._parse_custom(VMFVector.parse_tuple, row_name, vec_tuple)
 
-        self.offset_normals: List[List[VMFVector]] = [[VMFVector(0, 0, 0)] * self.dimension] * self.dimension
+        self.offset_normals: List[List[VMFVector]] = [[VMFVector(0, 0, 0) for _ in range(self.dimension)]
+                                                      for _ in range(self.dimension)]
         """Defines the default normal lines that the normals are based from."""
         for row_idx, row_value, row_name in self._iter_parse_matrix("offset_normals", data):
             row_nums_it = iter(row_value.split(" "))
             for idx, vec_tuple in enumerate(zip(row_nums_it, row_nums_it, row_nums_it)):
                 self.offset_normals[row_idx][idx] = self._parse_custom(VMFVector.parse_tuple, row_name, vec_tuple)
 
-        self.alphas: List[List[float]] = [[0] * self.dimension] * self.dimension
+        self.alphas: List[List[float]] = [[0 for _ in range(self.dimension)] for _ in range(self.dimension)]
         """Contains a value for each vertex that represents how much of which texture to shown in blended materials."""
         for row_idx, row_value, row_name in self._iter_parse_matrix("alphas", data):
             for idx, num_str in enumerate(row_value.split(" ")):
                 self.alphas[row_idx][idx] = self._parse_float(row_name, num_str)
 
-        self.triangle_tags: List[List[Tuple[int, int]]] = [[(0, 0)] * self.triangle_dimension] * self.triangle_dimension
+        self.triangle_tags: List[List[Tuple[int, int]]] = [[(0, 0) for _ in range(self.triangle_dimension)]
+                                                           for _ in range(self.triangle_dimension)]
         """Contains information specific to each triangle in the displacement."""
         for row_idx, row_value, row_name in self._iter_parse_matrix("triangle_tags", data):
             row_nums_it = iter(row_value.split(" "))
