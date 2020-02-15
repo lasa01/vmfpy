@@ -5,7 +5,7 @@ with open("README.md", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="vmfpy",
-    version="0.2.1",
+    version="0.2.2",
     author="Lassi Säike",
     description="A Valve Map Format (VMF) parser",
     long_description=long_description,
