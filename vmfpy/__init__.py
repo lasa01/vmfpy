@@ -62,6 +62,10 @@ class VPKFileIOWrapper(BufferedIOBase):
         return self._vpkf.tell()
 
 
+def vmf_path(path: str) -> PurePosixPath:
+    return PurePosixPath(path.replace("\\", "/").lower())
+
+
 class DirContents(NamedTuple):
     dirs: Set[str]
     files: Set[str]
@@ -75,7 +79,7 @@ class VMFFileSystem(Mapping[PurePosixPath, AnyBinaryIO]):
         self._index: Dict[PurePosixPath, Callable[[], AnyBinaryIO]] = dict()
         self.tree: Dict[PurePosixPath, DirContents] = dict()
         if index_files:
-            self.index_files()
+            self.index_all()
 
     def add_dir(self, path: str) -> None:
         self._dirs.add(path)
@@ -97,23 +101,35 @@ class VMFFileSystem(Mapping[PurePosixPath, AnyBinaryIO]):
     def _create_pf_opener(p: str, m: Tuple[bytes, int, int, int, int, int], v: vpk.VPK) -> Callable[[], AnyBinaryIO]:
         return lambda: VPKFileIOWrapper(v.get_vpkfile_instance(p, m))
 
-    def index_files_iter(self) -> Iterator[Tuple[PurePosixPath, Callable[[], AnyBinaryIO]]]:
-        for directory in self._dirs:
-            root: str
-            files: List[str]
-            for root, _, files in os.walk(directory):
-                root_path = PurePosixPath(root.replace("\\", "/").lower())
-                for file_name in files:
-                    path = root_path.relative_to(directory.replace("\\", "/").lower()) / file_name.lower()
-                    yield (path, self._create_f_opener(os.path.join(root, file_name)))
-        for pak_file in self._paks:
-            pak = vpk.open(pak_file)
-            for pak_path, metadata in pak.read_index_iter():
-                path = PurePosixPath(pak_path.lower())
-                yield (path, self._create_pf_opener(pak_path, metadata, pak))
+    def iter_dir(self, directory: str) -> Iterator[Tuple[PurePosixPath, Callable[[], AnyBinaryIO]]]:
+        root: str
+        files: List[str]
+        for root, _, files in os.walk(directory):
+            root_path = vmf_path(root)
+            for file_name in files:
+                path = root_path.relative_to(vmf_path(directory)) / file_name.lower()
+                yield (path, self._create_f_opener(os.path.join(root, file_name)))
 
-    def index_files(self) -> None:
-        for path, open_func in self.index_files_iter():
+    def iter_dirs(self) -> Iterator[Tuple[PurePosixPath, Callable[[], AnyBinaryIO]]]:
+        for directory in self._dirs:
+            yield from self.iter_dir(directory)
+
+    def iter_pak(self, pak_file: str) -> Iterator[Tuple[PurePosixPath, Callable[[], AnyBinaryIO]]]:
+        pak = vpk.open(pak_file)
+        for pak_path, metadata in pak.read_index_iter():
+            path = vmf_path(pak_path)
+            yield (path, self._create_pf_opener(pak_path, metadata, pak))
+
+    def iter_paks(self) -> Iterator[Tuple[PurePosixPath, Callable[[], AnyBinaryIO]]]:
+        for pak_file in self._paks:
+            yield from self.iter_pak(pak_file)
+
+    def iter_all(self) -> Iterator[Tuple[PurePosixPath, Callable[[], AnyBinaryIO]]]:
+        yield from self.iter_dirs()
+        yield from self.iter_paks()
+
+    def _do_index(self, index_iter: Iterator[Tuple[PurePosixPath, Callable[[], AnyBinaryIO]]]) -> None:
+        for path, open_func in index_iter:
             self._index[path] = open_func
             directory = path.parent
             if directory not in self.tree:
@@ -126,20 +142,35 @@ class VMFFileSystem(Mapping[PurePosixPath, AnyBinaryIO]):
                 self.tree[parent].dirs.add(last_parent.name)
                 last_parent = parent
 
+    def index_dir(self, directory: str) -> None:
+        self._do_index(self.iter_dir(directory))
+
+    def index_dirs(self) -> None:
+        self._do_index(self.iter_dirs())
+
+    def index_pak(self, pak_file: str) -> None:
+        self._do_index(self.iter_pak(pak_file))
+
+    def index_paks(self) -> None:
+        self._do_index(self.iter_paks())
+
+    def index_all(self) -> None:
+        self._do_index(self.iter_all())
+
     def clear_index(self) -> None:
         self._index.clear()
         self.tree.clear()
 
     def open_file(self, path: Union[str, PurePosixPath]) -> AnyBinaryIO:
         if isinstance(path, str):
-            path = PurePosixPath(path.lower())
+            path = vmf_path(path)
         if path not in self._index:
             raise FileNotFoundError(path)
         return self._index[path]()
 
     def __getitem__(self, key: Union[str, PurePosixPath]) -> AnyBinaryIO:
         if isinstance(key, str):
-            key = PurePosixPath(key.lower())
+            key = vmf_path(key)
         return self._index[key]()
 
     def __len__(self) -> int:
@@ -724,15 +755,10 @@ class VMFWorldEntity(VMFBrushEntity):
 
 
 class VMF(_VMFParser):
-    def __init__(self, file: AnyTextIO, data_dirs: Iterable[str] = (), data_paks: Iterable[str] = ()):
+    def __init__(self, file: AnyTextIO, fs: VMFFileSystem = VMFFileSystem()):
         super().__init__()
-        self.fs = VMFFileSystem()
+        self.fs = fs
         """File system for opening game files."""
-        for data_dir in data_dirs:
-            self.fs.add_dir(data_dir)
-        for data_pak in data_paks:
-            self.fs.add_pak(data_pak)
-        self.fs.index_files()
         vdf_dict = vdf.load(file, mapper=vdf.VDFDict, merge_duplicate_keys=False, escaped=False)
 
         versioninfo = self._parse_dict("versioninfo", vdf_dict)
