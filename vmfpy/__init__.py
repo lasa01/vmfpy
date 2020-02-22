@@ -2,6 +2,7 @@ import vdf
 import re
 from io import TextIOWrapper
 from .fs import VMFFileSystem, AnyBinaryIO, AnyTextIO
+from .vmt import VMT
 from typing import List,  Callable, Iterator, Tuple, Optional, NamedTuple, Union, TypeVar, Any
 
 
@@ -268,6 +269,10 @@ class VMFOverlayEntity(VMFPointEntity):
     def open_material_file(self) -> TextIOWrapper:
         return self.fs.open_file_utf8(self.materialpath)
 
+    def get_material(self) -> VMT:
+        with self.open_material_file() as vmt_f:
+            return VMT(vmt_f, self.fs)
+
 
 class VMFLightEntity(VMFPointEntity):
     """Creates an invisible, static light source that shines in all directions."""
@@ -529,6 +534,10 @@ class VMFSide(_VMFParser):
     def open_material_file(self) -> TextIOWrapper:
         return self.fs.open_file_utf8(self.materialpath)
 
+    def get_material(self) -> VMT:
+        with self.open_material_file() as vmt_f:
+            return VMT(vmt_f, self.fs)
+
 
 class VMFSolid(_VMFParser):
     """Represents 1 single brush in Hammer."""
@@ -566,8 +575,12 @@ class VMFWorldEntity(VMFBrushEntity):
         """The name of the skybox to be used."""
         self.skypath = "materials/skybox/" + self.skyname + ".vmt"
 
-    def open_sky(self) -> TextIOWrapper:
+    def open_sky_file(self) -> TextIOWrapper:
         return self.fs.open_file_utf8(self.skypath)
+
+    def get_sky(self) -> VMT:
+        with self.open_sky_file() as vmt_f:
+            return VMT(vmt_f, self.fs)
 
 
 class VMF(_VMFParser):
