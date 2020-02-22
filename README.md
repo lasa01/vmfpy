@@ -1,6 +1,6 @@
 # vmfpy
 
-A Valve Map Format (VMF) parser.
+A Valve Map Format (VMF) and Valve Material Type (VMT) parser.
 
 ## Installation
 ```
