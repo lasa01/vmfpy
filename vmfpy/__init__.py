@@ -168,6 +168,9 @@ class VMFFileSystem(Mapping[PurePosixPath, AnyBinaryIO]):
             raise FileNotFoundError(path)
         return self._index[path]()
 
+    def open_file_utf8(self, path: Union[str, PurePosixPath]) -> TextIOWrapper:
+        return TextIOWrapper(cast(IO[bytes], self.open_file(path)), encoding='utf-8')
+
     def __getitem__(self, key: Union[str, PurePosixPath]) -> AnyBinaryIO:
         if isinstance(key, str):
             key = vmf_path(key)
@@ -444,9 +447,7 @@ class VMFOverlayEntity(VMFPointEntity):
         self.uv3: VMFVector = self._parse_custom_str(VMFVector.parse_str, "uv3", data)
 
     def open_material_file(self) -> TextIOWrapper:
-        return TextIOWrapper(cast(IO[bytes],
-                             self.fs.open_file(self.materialpath)),
-                             encoding='utf-8')
+        return self.fs.open_file_utf8(self.materialpath)
 
 
 class VMFLightEntity(VMFPointEntity):
@@ -707,9 +708,7 @@ class VMFSide(_VMFParser):
             self.dispinfo = self._parse_custom(VMFDispInfo, "dispinfo", dispinfo_dict)
 
     def open_material_file(self) -> TextIOWrapper:
-        return TextIOWrapper(cast(IO[bytes],
-                             self.fs.open_file(self.materialpath)),
-                             encoding='utf-8')
+        return self.fs.open_file_utf8(self.materialpath)
 
 
 class VMFSolid(_VMFParser):
@@ -749,9 +748,7 @@ class VMFWorldEntity(VMFBrushEntity):
         self.skypath = "materials/skybox/" + self.skyname + ".vmt"
 
     def open_sky(self) -> TextIOWrapper:
-        return TextIOWrapper(cast(IO[bytes],
-                             self.fs.open_file(self.skypath)),
-                             encoding='utf-8')
+        return self.fs.open_file_utf8(self.skypath)
 
 
 class VMF(_VMFParser):
