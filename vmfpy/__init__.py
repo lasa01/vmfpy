@@ -95,7 +95,9 @@ class _VMFParser():
         return self._check_dict(name, value)
 
     def _iter_parse_matrix(self, name: str, vdict: dict) -> Iterator[Tuple[int, str, str]]:
-        value = self._parse_dict(name, vdict)
+        if name not in vdict:
+            return
+        value = self._check_dict(name, vdict[name])
         for row_name in value:
             full_name = f"{name} {row_name}"
             if row_name[:3] != "row":
@@ -517,8 +519,11 @@ class VMFSide(_VMFParser):
         self.uaxis: VMFAxis = self._parse_custom_str(VMFAxis.parse, "uaxis", data)
         """The u-axis and v-axis are the texture specific axes."""
         self.vaxis: VMFAxis = self._parse_custom_str(VMFAxis.parse, "vaxis", data)
-        """The u-axis and v-axis are the texture specific axes."""
-        self.rotation = self._parse_float_str("rotation", data)
+        if "rotation" in data:
+            """The u-axis and v-axis are the texture specific axes."""
+            self.rotation: Optional[float] = self._parse_float_str("rotation", data)
+        else:
+            self.rotation = None
         """The rotation of the given texture on the side."""
         self.lightmapscale = self._parse_int_str("lightmapscale", data)
         """The light map resolution on the face."""
@@ -590,15 +595,21 @@ class VMF(_VMFParser):
         """File system for opening game files."""
         vdf_dict = vdf.load(file, mapper=vdf.VDFDict, merge_duplicate_keys=False, escaped=False)
 
-        versioninfo = self._parse_dict("versioninfo", vdf_dict)
-        self.editorversion = self._parse_int_str("editorversion", versioninfo)
-        """The version of Hammer used to create the file, version 4.00 is "400"."""
-        self.editorbuild = self._parse_int_str("editorbuild", versioninfo)
-        """The patch number of Hammer the file was generated with."""
-        self.mapversion = self._parse_int_str("mapversion", versioninfo)
-        """This represents how many times you've saved the file, useful for comparing old or new versions."""
-        self.prefab = self._parse_bool("prefab", versioninfo)
-        """Whether this is a full map or simply a collection of prefabricated objects."""
+        if "versioninfo" in vdf_dict:
+            versioninfo = self._parse_dict("versioninfo", vdf_dict)
+            self.editorversion: Optional[int] = self._parse_int_str("editorversion", versioninfo)
+            """The version of Hammer used to create the file, version 4.00 is "400"."""
+            self.editorbuild: Optional[int] = self._parse_int_str("editorbuild", versioninfo)
+            """The patch number of Hammer the file was generated with."""
+            self.mapversion: Optional[int] = self._parse_int_str("mapversion", versioninfo)
+            """This represents how many times you've saved the file, useful for comparing old or new versions."""
+            self.prefab: Optional[int] = self._parse_bool("prefab", versioninfo)
+            """Whether this is a full map or simply a collection of prefabricated objects."""
+        else:
+            self.editorversion = None
+            self.editorbuild = None
+            self.mapversion = None
+            self.prefab = None
 
         world_dict = self._parse_dict("world", vdf_dict)
         self.world: VMFWorldEntity = self._parse_custom(VMFWorldEntity, "world", world_dict, self.fs)
