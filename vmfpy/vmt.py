@@ -10,9 +10,12 @@ class VMTParseException(Exception):
     pass
 
 
-_VEC2_REGEX = re.compile(r"^\[(-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*)]$")
-_VEC3_REGEX = re.compile(r"^\[(-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*)]$")
-_VEC4_REGEX = re.compile(r"^\[(-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*)]$")
+_VEC2_REGEX = re.compile(r"^\[ *(-?\d*\.?\d*e?-?\d*) *(-?\d*\.?\d*e?-?\d*) *]$")
+_VEC3_REGEX = re.compile(r"^\[ *(-?\d*\.?\d*e?-?\d*) *(-?\d*\.?\d*e?-?\d*) *(-?\d*\.?\d*e?-?\d*) *]$")
+_VEC4_REGEX = re.compile(
+    r"^\[ *(-?\d*\.?\d*e?-?\d*) *(-?\d*\.?\d*e?-?\d*)"
+    r" *(-?\d*\.?\d*e?-?\d*) *(-?\d*\.?\d*e?-?\d*) *]$"
+)
 
 
 def _parse_vec2(value: str) -> Tuple[float, float]:
