@@ -1,8 +1,7 @@
 import vdf
 from .fs import VMFFileSystem, vmf_path, AnyBinaryIO, AnyTextIO
 from pathlib import PurePosixPath
-from collections import defaultdict
-from typing import DefaultDict, Dict, NamedTuple, Tuple
+from typing import Dict, NamedTuple, Tuple
 import re
 
 
@@ -94,7 +93,6 @@ class VMT():
         shader_dict: dict = vdf_dict[shader_name]
         if not isinstance(shader_dict, dict):
             raise VMTParseException("shader is not a dict")
-        self.flags: DefaultDict[str, bool] = defaultdict(lambda: False)
         self.parameters: Dict[str, str] = {}
         for key in shader_dict:
             key_l = key.lower()
