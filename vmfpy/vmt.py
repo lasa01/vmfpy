@@ -82,6 +82,34 @@ class VMTColor(NamedTuple):
         return VMTColor(*colors)
 
 
+_TRANSFORM_REGEX = re.compile(
+    r"^center *(-?\d*\.?\d*e?-?\d*) *(-?\d*\.?\d*e?-?\d*) *"
+    r"scale *(-?\d*\.?\d*e?-?\d*) *(-?\d*\.?\d*e?-?\d*) *"
+    r"rotate *(-?\d*\.?\d*e?-?\d*) *"
+    r"translate *(-?\d*\.?\d*e?-?\d*) *(-?\d*\.?\d*e?-?\d*) *$"
+)
+
+
+class VMTTransform(NamedTuple):
+    center: Tuple[float, float]
+    scale: Tuple[float, float]
+    rotate: float
+    translate: Tuple[float, float]
+
+    @staticmethod
+    def _parse(value: str) -> 'VMTTransform':
+        match = _TRANSFORM_REGEX.match(value)
+        if match is None:
+            raise VMTParseException("transform syntax is invalid")
+        try:
+            groups = [float(s) for s in match.groups()]
+        except ValueError:
+            raise VMTParseException("transform contains an invalid float")
+        except OverflowError:
+            raise VMTParseException("transform float out of range")
+        return VMTTransform((groups[0], groups[1]), (groups[2], groups[3]), groups[4], (groups[5], groups[6]))
+
+
 class VMT():
     def __init__(self, file: AnyTextIO, fs: VMFFileSystem = VMFFileSystem()) -> None:
         self.fs = fs
@@ -149,3 +177,6 @@ class VMT():
 
     def param_as_color(self, param: str) -> VMTColor:
         return VMTColor._parse(self.parameters[param])
+
+    def param_as_transform(self, param: str) -> VMTTransform:
+        return VMTTransform._parse(self.parameters[param])
