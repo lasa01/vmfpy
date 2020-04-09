@@ -58,7 +58,7 @@ class VPKFileIOWrapper(BufferedIOBase):
 
 
 def vmf_path(path: str) -> PurePosixPath:
-    return PurePosixPath(path.replace("\\", "/").lower())
+    return PurePosixPath(path.replace("\\", "/").lstrip("/").lower())
 
 
 class DirContents(NamedTuple):
