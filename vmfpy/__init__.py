@@ -525,16 +525,22 @@ class VMFSide(_VMFParser):
         self.uaxis: VMFAxis = self._parse_custom_str(VMFAxis.parse, "uaxis", data)
         """The u-axis and v-axis are the texture specific axes."""
         self.vaxis: VMFAxis = self._parse_custom_str(VMFAxis.parse, "vaxis", data)
+        """The u-axis and v-axis are the texture specific axes."""
         if "rotation" in data:
-            """The u-axis and v-axis are the texture specific axes."""
             self.rotation: Optional[float] = self._parse_float_str("rotation", data)
         else:
             self.rotation = None
-        """The rotation of the given texture on the side."""
-        self.lightmapscale = self._parse_int_str("lightmapscale", data)
+            """The rotation of the given texture on the side."""
+        if "lightmapscale" in data:
+            self.lightmapscale: Optional[int] = self._parse_int_str("lightmapscale", data)
+        else:
+            self.lightmapscale = None
         """The light map resolution on the face."""
-        self.smoothing_groups = self._parse_int_str("smoothing_groups", data).to_bytes(4, 'little')
-        """"Select a smoothing group to use for lighting on the face."""
+        if "smoothing_groups" in data:
+            self.smoothing_groups: Optional[bytes] = self._parse_int_str("smoothing_groups", data).to_bytes(4, 'little')
+            """"Select a smoothing group to use for lighting on the face."""
+        else:
+            self.smoothing_groups = None
 
         self.dispinfo: Optional[VMFDispInfo] = None
         """Deals with all the information for a displacement map."""
