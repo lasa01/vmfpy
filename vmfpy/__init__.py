@@ -656,7 +656,9 @@ class VMF(_VMFParser):
             elif classname.startswith("func"):
                 entity_inst = self._parse_custom(VMFBrushEntity, "entity (func)", entity, self.fs)
                 self.func_entities.append(entity_inst)
-            elif classname.startswith("prop"):
+            elif classname in ("prop_static", "prop_detail", "prop_ragdoll", "prop_door_rotating",
+                               "prop_dynamic", "prop_dynamic_override",
+                               "prop_physics", "prop_physics_multiplayer", "prop_physics_override"):
                 entity_inst = self._parse_custom(VMFPropEntity, "entity (prop)", entity, self.fs)
                 self.prop_entities.append(entity_inst)
             elif "origin" in entity:
