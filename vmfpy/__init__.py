@@ -215,6 +215,12 @@ class VMFPropEntity(VMFPointEntity):
             self.angles = self._parse_custom_str(VMFVector.parse_str, "angles", data)
         else:
             self.angles = VMFVector(0, 0, 0)
+        if "modelscale" in data:
+            self.scale = self._parse_float_str("modelscale", data)
+        elif "uniformscale" in data:
+            self.scale = self._parse_float_str("uniformscale", data)
+        else:
+            self.scale = 1
         self.model = self._parse_str("model", data)
         """The model this entity should appear as."""
         self.skin: int
