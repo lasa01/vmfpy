@@ -136,13 +136,13 @@ class VMT():
 
     def param_as_int(self, param: str) -> int:
         try:
-            return int(self.parameters[param])
+            return int(self.parameters[param].strip("<>"))
         except ValueError:
             raise VMTParseException(f"{param} is not a valid int")
 
     def param_as_float(self, param: str) -> float:
         try:
-            return float(self.parameters[param])
+            return float(self.parameters[param].strip("<>"))
         except ValueError:
             raise VMTParseException(f"{param} is not a valid float")
         except OverflowError:
