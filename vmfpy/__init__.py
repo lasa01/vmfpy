@@ -173,6 +173,23 @@ class VMFColor(NamedTuple):
     g: int
     b: int
 
+    @staticmethod
+    def parse_with_brightness(data: str) -> Tuple['VMFColor', float]:
+        values = [s for s in data.split(" ") if s != ""]
+        if len(values) != 4:
+            raise VMFParseException("color with brightness doesn't have 4 values")
+        try:
+            color = VMFColor(*(int(s) for s in values[:3]))
+        except ValueError:
+            raise VMFParseException("color contains an invalid int")
+        try:
+            brightness = float(values[3])
+        except ValueError:
+            raise VMFParseException("color brightness is an invalid float")
+        except OverflowError:
+            raise VMFParseException("color brightness is out of range")
+        return (color, brightness)
+
 
 class VMFEntity(_VMFParser):
     """An entity."""
@@ -286,20 +303,16 @@ class VMFLightEntity(VMFPointEntity):
     """Creates an invisible, static light source that shines in all directions."""
     def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
         super().__init__(data, fs)
-        light_list = self._parse_int_list_str("_light", data)
-        if len(light_list) != 4:
-            raise VMFParseException("_light doesn't have 4 values", self._context)
-        self.color = VMFColor(*light_list[:3])
+        color, brightness = self._parse_custom_str(VMFColor.parse_with_brightness, "_light", data)
+        self.color: VMFColor = color
         """The RGB color of the light."""
-        self.brightness = light_list[3]
+        self.brightness: float = brightness
         """The brightness of the light."""
 
-        light_hdr_list = self._parse_int_list_str("_lightHDR", data)
-        if len(light_list) != 4:
-            raise VMFParseException("_lightHDR doesn't have 4 values", self._context)
-        self.hdr_color = VMFColor(*light_hdr_list[:3])
+        color, brightness = self._parse_custom_str(VMFColor.parse_with_brightness, "_lightHDR", data)
+        self.hdr_color: VMFColor = color
         """Color override used in HDR mode. Default is -1 -1 -1 which means no change."""
-        self.hdr_brightness = light_hdr_list[3]
+        self.hdr_brightness: float = brightness
         """Brightness override used in HDR mode. Default is 1 which means no change."""
         self.hdr_scale = self._parse_float_str("_lightscaleHDR", data)
         """A simple intensity multiplier used when compiling HDR lighting."""
@@ -364,20 +377,16 @@ class VMFEnvLightEntity(VMFLightEntity):
         self.pitch = self._parse_float_str("pitch", data)
         """Used instead of angles value for reasons unknown."""
 
-        amb_light_list = self._parse_int_list_str("_ambient", data)
-        if len(amb_light_list) != 4:
-            raise VMFParseException("_ambient doesn't have 4 values", self._context)
-        self.amb_color = VMFColor(*amb_light_list[:3])
+        color, brightness = self._parse_custom_str(VMFColor.parse_with_brightness, "_ambient", data)
+        self.amb_color: VMFColor = color
         """Color of the diffuse skylight."""
-        self.amb_brightness = amb_light_list[3]
+        self.amb_brightness: float = brightness
         """Brightness of the diffuse skylight."""
 
-        amb_light_hdr_list = self._parse_int_list_str("_ambientHDR", data)
-        if len(amb_light_hdr_list) != 4:
-            raise VMFParseException("_ambientHDR doesn't have 4 values", self._context)
-        self.amb_hdr_color = VMFColor(*amb_light_hdr_list[:3])
+        color, brightness = self._parse_custom_str(VMFColor.parse_with_brightness, "_ambientHDR", data)
+        self.amb_hdr_color: VMFColor = color
         """Override for ambient color when compiling HDR lighting."""
-        self.amb_hdr_brightness = amb_light_hdr_list[3]
+        self.amb_hdr_brightness: float = brightness
         """Override for ambient brightness when compiling HDR lighting."""
         self.amb_hdr_scale = self._parse_float_str("_AmbientScaleHDR", data)
         """Amount to scale the ambient light by when compiling for HDR."""
