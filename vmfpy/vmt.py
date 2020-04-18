@@ -53,7 +53,7 @@ def _parse_vec4(value: str) -> Tuple[float, float, float, float]:
         raise VMTParseException("vector4 float out of range")
 
 
-_I_COLOR_REGEX = re.compile(r"^{(\d+) (\d+) (\d+)}$")
+_I_COLOR_REGEX = re.compile(r"^{ *(\d+) +(\d+) +(\d+) *}$")
 
 
 class VMTColor(NamedTuple):
