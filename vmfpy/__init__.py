@@ -174,6 +174,17 @@ class VMFColor(NamedTuple):
     b: int
 
     @staticmethod
+    def parse(data: str) -> 'VMFColor':
+        values = [s for s in data.split(" ") if s != ""]
+        if len(values) != 3:
+            raise VMFParseException("color doesn't have 3 values")
+        try:
+            color = VMFColor(*(int(s) for s in values))
+        except ValueError:
+            raise VMFParseException("color contains an invalid int")
+        return color
+
+    @staticmethod
     def parse_with_brightness(data: str) -> Tuple['VMFColor', float]:
         values = [s for s in data.split(" ") if s != ""]
         if len(values) != 4:
@@ -246,6 +257,14 @@ class VMFPropEntity(VMFPointEntity):
             self.skin = self._parse_int_str("skin", data)
         else:
             self.skin = 0
+        if "rendercolor" in data:
+            self.rendercolor = self._parse_custom_str(VMFColor.parse, "rendercolor", data)
+        else:
+            self.rendercolor = VMFColor(255, 255, 255)
+        if "renderamt" in data:
+            self.renderamt = self._parse_int_str("renderamt", data)
+        else:
+            self.renderamt = 255
 
     def open_model(self) -> AnyBinaryIO:
         return self.fs.open_file(self.model)
