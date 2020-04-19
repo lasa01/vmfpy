@@ -111,7 +111,7 @@ class VMTTransform(NamedTuple):
 
 
 class VMT():
-    def __init__(self, file: AnyTextIO, fs: VMFFileSystem = VMFFileSystem()) -> None:
+    def __init__(self, file: AnyTextIO, fs: VMFFileSystem = VMFFileSystem(), allow_patch: bool = False) -> None:
         self.fs = fs
         vdf_dict: dict = vdf.load(file, escaped=False)
         if len(vdf_dict) != 1:
@@ -121,6 +121,32 @@ class VMT():
         shader_dict: dict = vdf_dict[shader_name]
         if not isinstance(shader_dict, dict):
             raise VMTParseException("shader is not a dict")
+        if self.shader == "patch":
+            if not allow_patch:
+                raise VMTParseException("patch materials are not allowed")
+            if "include" not in shader_dict:
+                raise VMTParseException("patch material doesn't include another material")
+            included_name = shader_dict["include"]
+            patch_params = {}
+            if "insert" in shader_dict:
+                inserted = shader_dict["insert"]
+                if not isinstance(inserted, dict):
+                    raise VMTParseException("included insert is not a dict")
+                patch_params.update(inserted)
+            if "replace" in shader_dict:
+                replaced = shader_dict["replace"]
+                if not isinstance(replaced, dict):
+                    raise VMTParseException("included replace is not a dict")
+                patch_params.update(replaced)
+            vdf_dict = vdf.load(fs.open_file_utf8(included_name), escaped=False)
+            if len(vdf_dict) != 1:
+                raise VMTParseException("included material does not contain exactly 1 member")
+            shader_name = next(iter(vdf_dict))
+            self.shader = shader_name.lower()
+            shader_dict = vdf_dict[shader_name]
+            if not isinstance(shader_dict, dict):
+                raise VMTParseException("included shader is not a dict")
+            shader_dict.update(patch_params)
         self.parameters: Dict[str, str] = {}
         for key in shader_dict:
             key_l = key.lower()
