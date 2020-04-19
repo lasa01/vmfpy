@@ -294,9 +294,9 @@ class VMFOverlayEntity(VMFPointEntity):
     def open_material_file(self) -> TextIOWrapper:
         return self.fs.open_file_utf8(self.materialpath)
 
-    def get_material(self) -> VMT:
+    def get_material(self, allow_patch: bool = False) -> VMT:
         with self.open_material_file() as vmt_f:
-            return VMT(vmt_f, self.fs)
+            return VMT(vmt_f, self.fs, allow_patch=allow_patch)
 
 
 class VMFLightEntity(VMFPointEntity):
@@ -560,9 +560,9 @@ class VMFSide(_VMFParser):
     def open_material_file(self) -> TextIOWrapper:
         return self.fs.open_file_utf8(self.materialpath)
 
-    def get_material(self) -> VMT:
+    def get_material(self, allow_patch: bool = False) -> VMT:
         with self.open_material_file() as vmt_f:
-            return VMT(vmt_f, self.fs)
+            return VMT(vmt_f, self.fs, allow_patch=allow_patch)
 
 
 class VMFSolid(_VMFParser):
