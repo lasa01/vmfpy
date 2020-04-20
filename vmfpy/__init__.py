@@ -328,13 +328,20 @@ class VMFLightEntity(VMFPointEntity):
         self.brightness: float = brightness
         """The brightness of the light."""
 
-        color, brightness = self._parse_custom_str(VMFColor.parse_with_brightness, "_lightHDR", data)
-        self.hdr_color: VMFColor = color
-        """Color override used in HDR mode. Default is -1 -1 -1 which means no change."""
-        self.hdr_brightness: float = brightness
-        """Brightness override used in HDR mode. Default is 1 which means no change."""
-        self.hdr_scale = self._parse_float_str("_lightscaleHDR", data)
-        """A simple intensity multiplier used when compiling HDR lighting."""
+        if "_lightHDR" in data:
+            color, brightness = self._parse_custom_str(VMFColor.parse_with_brightness, "_lightHDR", data)
+            self.hdr_color: VMFColor = color
+            """Color override used in HDR mode. Default is -1 -1 -1 which means no change."""
+            self.hdr_brightness: float = brightness
+            """Brightness override used in HDR mode. Default is 1 which means no change."""
+        else:
+            self.hdr_color = VMFColor(-1, -1, -1)
+            self.hdr_brightness = 1.0
+        if "_lightscaleHDR" in data:
+            self.hdr_scale = self._parse_float_str("_lightscaleHDR", data)
+            """A simple intensity multiplier used when compiling HDR lighting."""
+        else:
+            self.hdr_scale = 1.0
 
         self.style: Optional[int] = None
         """Various Custom Appearance presets."""
@@ -402,16 +409,26 @@ class VMFEnvLightEntity(VMFLightEntity):
         self.amb_brightness: float = brightness
         """Brightness of the diffuse skylight."""
 
-        color, brightness = self._parse_custom_str(VMFColor.parse_with_brightness, "_ambientHDR", data)
-        self.amb_hdr_color: VMFColor = color
-        """Override for ambient color when compiling HDR lighting."""
-        self.amb_hdr_brightness: float = brightness
-        """Override for ambient brightness when compiling HDR lighting."""
-        self.amb_hdr_scale = self._parse_float_str("_AmbientScaleHDR", data)
-        """Amount to scale the ambient light by when compiling for HDR."""
+        if "_ambientHDR" in data:
+            color, brightness = self._parse_custom_str(VMFColor.parse_with_brightness, "_ambientHDR", data)
+            self.amb_hdr_color: VMFColor = color
+            """Override for ambient color when compiling HDR lighting."""
+            self.amb_hdr_brightness: float = brightness
+            """Override for ambient brightness when compiling HDR lighting."""
+        else:
+            self.amb_hdr_color = VMFColor(-1, -1, -1)
+            self.amb_hdr_brightness = 1.0
+        if "_AmbientScaleHDR" in data:
+            self.amb_hdr_scale = self._parse_float_str("_AmbientScaleHDR", data)
+            """Amount to scale the ambient light by when compiling for HDR."""
+        else:
+            self.amb_hdr_scale = 1.0
 
-        self.sun_spread_angle = self._parse_float_str("SunSpreadAngle", data)
-        """The angular extent of the sun for casting soft shadows."""
+        if "SunSpreadAngle" in data:
+            self.sun_spread_angle = self._parse_float_str("SunSpreadAngle", data)
+            """The angular extent of the sun for casting soft shadows."""
+        else:
+            self.sun_spread_angle = 0.0
 
 
 _PLANE_REGEX = re.compile(r"^\((-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*)\) "
