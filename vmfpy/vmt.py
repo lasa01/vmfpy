@@ -1,7 +1,7 @@
 import vdf
 from .fs import VMFFileSystem, vmf_path, AnyBinaryIO, AnyTextIO
 from pathlib import PurePosixPath
-from typing import Dict, NamedTuple, Tuple
+from typing import Dict, NamedTuple, Tuple, Sequence
 import re
 
 
@@ -20,9 +20,13 @@ _VEC4_REGEX = re.compile(
 def _parse_vec2(value: str) -> Tuple[float, float]:
     match = _VEC2_REGEX.match(value)
     if match is None:
-        raise VMTParseException("vector2 syntax is invalid")
+        values: Sequence[str] = value.split(" ")
+        if len(values) != 2:
+            raise VMTParseException("vector2 syntax is invalid")
+    else:
+        values = match.groups()
     try:
-        return tuple((float(s) for s in match.groups()))  # type: ignore
+        return tuple((float(s) for s in values))  # type: ignore
     except ValueError:
         raise VMTParseException("vector2 contains an invalid float")
     except OverflowError:
@@ -32,9 +36,13 @@ def _parse_vec2(value: str) -> Tuple[float, float]:
 def _parse_vec3(value: str) -> Tuple[float, float, float]:
     match = _VEC3_REGEX.match(value)
     if match is None:
-        raise VMTParseException("vector3 syntax is invalid")
+        values: Sequence[str] = value.split(" ")
+        if len(values) != 3:
+            raise VMTParseException("vector3 syntax is invalid")
+    else:
+        values = match.groups()
     try:
-        return tuple((float(s) for s in match.groups()))  # type: ignore
+        return tuple((float(s) for s in values))  # type: ignore
     except ValueError:
         raise VMTParseException("vector3 contains an invalid float")
     except OverflowError:
@@ -44,9 +52,13 @@ def _parse_vec3(value: str) -> Tuple[float, float, float]:
 def _parse_vec4(value: str) -> Tuple[float, float, float, float]:
     match = _VEC4_REGEX.match(value)
     if match is None:
-        raise VMTParseException("vector4 syntax is invalid")
+        values: Sequence[str] = value.split(" ")
+        if len(values) != 4:
+            raise VMTParseException("vector4 syntax is invalid")
+    else:
+        values = match.groups()
     try:
-        return tuple((float(s) for s in match.groups()))  # type: ignore
+        return tuple((float(s) for s in values))  # type: ignore
     except ValueError:
         raise VMTParseException("vector4 contains an invalid float")
     except OverflowError:
