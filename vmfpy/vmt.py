@@ -114,7 +114,7 @@ class VMTTransform(NamedTuple):
         if match is None:
             raise VMTParseException("transform syntax is invalid")
         try:
-            groups = [float(s) for s in match.groups()]
+            groups = [float(s) if s != "" else 1.0 for s in match.groups()]
         except ValueError:
             raise VMTParseException("transform contains an invalid float")
         except OverflowError:
