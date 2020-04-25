@@ -382,11 +382,11 @@ class VMFSpotLightEntity(VMFLightEntity):
         self.pitch = self._parse_float_str("pitch", data)
         """Used instead of angles value for reasons unknown."""
 
-        self.inner_cone = self._parse_int_str("_inner_cone", data)
+        self.inner_cone = self._parse_float_str("_inner_cone", data)
         """The angle of the inner spotlight beam."""
-        self.cone = self._parse_int_str("_cone", data)
+        self.cone = self._parse_float_str("_cone", data)
         """The angle of the outer spotlight beam."""
-        self.exponent = self._parse_int_str("_exponent", data)
+        self.exponent = self._parse_float_str("_exponent", data)
         """Changes the distance between the umbra and penumbra cone."""
 
 
