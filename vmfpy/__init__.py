@@ -187,18 +187,21 @@ class VMFColor(NamedTuple):
     @staticmethod
     def parse_with_brightness(data: str) -> Tuple['VMFColor', float]:
         values = [s for s in data.split(" ") if s != ""]
-        if len(values) != 4:
-            raise VMFParseException("color with brightness doesn't have 4 values")
+        if len(values) < 3:
+            raise VMFParseException("color with brightness doesn't have at least 3 values")
         try:
             color = VMFColor(*(int(s) for s in values[:3]))
         except ValueError:
             raise VMFParseException("color contains an invalid int")
-        try:
-            brightness = float(values[3])
-        except ValueError:
-            raise VMFParseException("color brightness is an invalid float")
-        except OverflowError:
-            raise VMFParseException("color brightness is out of range")
+        if len(values) > 3:
+            try:
+                brightness = float(values[3])
+            except ValueError:
+                raise VMFParseException("color brightness is an invalid float")
+            except OverflowError:
+                raise VMFParseException("color brightness is out of range")
+        else:
+            brightness = 0.0
         return (color, brightness)
 
 
