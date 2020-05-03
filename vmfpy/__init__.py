@@ -638,14 +638,6 @@ class VMFWorldEntity(VMFBrushEntity):
             raise VMFParseException("classname is not worldspawn")
         self.skyname = self._parse_str("skyname", data)
         """The name of the skybox to be used."""
-        self.skypath = "materials/skybox/" + self.skyname + ".vmt"
-
-    def open_sky_file(self) -> TextIOWrapper:
-        return self.fs.open_file_utf8(self.skypath)
-
-    def get_sky(self) -> VMT:
-        with self.open_sky_file() as vmt_f:
-            return VMT(vmt_f, self.fs)
 
 
 class VMF(_VMFParser):
