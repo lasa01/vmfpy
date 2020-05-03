@@ -434,6 +434,49 @@ class VMFEnvLightEntity(VMFLightEntity):
             self.sun_spread_angle = 0.0
 
 
+class VMFSkyCameraEntity(VMFPointEntity):
+    """Used to mark the position of the map's origin inside the 3D Skybox."""
+    def __init__(self, data: vdf.VDFDict, fs: VMFFileSystem):
+        super().__init__(data, fs)
+        self.angles: VMFVector
+        """This entity's orientation in the world."""
+        if "angles" in data:
+            self.angles = self._parse_custom_str(VMFVector.parse_str, "angles", data)
+        else:
+            self.angles = VMFVector(0, 0, 0)
+
+        if "scale" in data:
+            self.scale = self._parse_float_str("scale", data)
+            """This number determines how large objects in your skybox will seem relative to the map."""
+        else:
+            self.scale = 16.0
+
+        if "fogenable" in data:
+            self.fog_enable = self._parse_bool("fogenable", data)
+        else:
+            self.fog_enable = False
+        if "fogblend" in data:
+            self.fog_blend = self._parse_float_str("fogblend", data)
+        else:
+            self.fog_blend = 0.0
+        if "fogcolor" in data:
+            self.fog_color = self._parse_custom_str(VMFColor.parse, "fogcolor", data)
+        else:
+            self.fog_color = VMFColor(255, 255, 255)
+        if "fogcolor2" in data:
+            self.fog_color2 = self._parse_custom_str(VMFColor.parse, "fogcolor2", data)
+        else:
+            self.fog_color2 = VMFColor(255, 255, 255)
+        if "fogdir" in data:
+            self.fog_dir = self._parse_custom_str(VMFVector.parse_str, "fogdir", data)
+        if "fogstart" in data:
+            self.fog_start = self._parse_float_str("fogstart", data)
+        if "fogend" in data:
+            self.fog_end = self._parse_float_str("fogend", data)
+        if "fogmaxdensity" in data:
+            self.fog_max_density = self._parse_float_str("fogmaxdensity", data)
+
+
 _PLANE_REGEX = re.compile(r"^\((-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*)\) "
                           r"\((-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*)\) "
                           r"\((-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*) (-?\d*\.?\d*e?-?\d*)\)$")
@@ -671,8 +714,8 @@ class VMF(_VMFParser):
         """List of all entities in the map."""
         self.overlay_entities: List[VMFOverlayEntity] = list()
         """List of info_overlays in the map."""
+        self.sky_camera_entity: Optional[VMFSkyCameraEntity] = None
         self.env_light_entity: Optional[VMFEnvLightEntity] = None
-        """List of light_environments in the map."""
         self.spot_light_entities: List[VMFSpotLightEntity] = list()
         """List of light_spots in the map."""
         self.light_entities: List[VMFLightEntity] = list()
@@ -690,6 +733,9 @@ class VMF(_VMFParser):
             if classname == "info_overlay":
                 entity_inst = self._parse_custom(VMFOverlayEntity, "entity (info_overlay)", entity, self.fs)
                 self.overlay_entities.append(entity_inst)
+            elif classname == "sky_camera":
+                entity_inst = self._parse_custom(VMFSkyCameraEntity, "entity (sky_camera)", entity, self.fs)
+                self.sky_camera_entity = entity_inst
             elif classname == "light_environment":
                 entity_inst = self._parse_custom(VMFEnvLightEntity, "entity (light_environment)", entity, self.fs)
                 self.env_light_entity = entity_inst
