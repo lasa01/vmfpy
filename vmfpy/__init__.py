@@ -6,6 +6,28 @@ from .vmt import VMT
 from typing import List,  Callable, Iterator, Tuple, Optional, NamedTuple, Union, TypeVar, Any
 
 
+VDFDictKey = Union[str, Tuple[int, str]]
+
+
+class LowerCaseVDFDict(vdf.VDFDict):
+    def _normalize_key(self, key: VDFDictKey) -> VDFDictKey:
+        key = super()._normalize_key(key)
+        return (key[0], key[1].lower())
+
+    def __setitem__(self, key: VDFDictKey, value: Any) -> None:
+        if isinstance(key, str):
+            key = key.lower()
+        if isinstance(key, tuple):
+            key = (key[0], key[1].lower())
+        super().__setitem__(key, value)
+
+    def get_all_for(self, key: str) -> List[Any]:
+        return super().get_all_for(key.lower())
+
+    def remove_all_for(self, key: str) -> None:
+        super().remove_all_for(key.lower())
+
+
 class VMFParseException(Exception):
     def __init__(self, msg: str, context: str = None):
         super().__init__(f"VMF parsing failed: {msg}")
@@ -689,7 +711,7 @@ class VMF(_VMFParser):
         super().__init__()
         self.fs = fs
         """File system for opening game files."""
-        vdf_dict = vdf.load(file, mapper=vdf.VDFDict, merge_duplicate_keys=False, escaped=False)
+        vdf_dict = vdf.load(file, mapper=LowerCaseVDFDict, merge_duplicate_keys=False, escaped=False)
 
         if "versioninfo" in vdf_dict:
             versioninfo = self._parse_dict("versioninfo", vdf_dict)
