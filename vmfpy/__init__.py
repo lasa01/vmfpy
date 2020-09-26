@@ -669,7 +669,8 @@ class VMFBrushEntity(VMFEntity):
         dict_solids = data.get_all_for("solid")
         self.solids: List[VMFSolid] = list()
         for solid in dict_solids:
-            solid = self._check_dict("solid", solid)
+            if not isinstance(solid, vdf.VDFDict):
+                continue
             self.solids.append(self._parse_custom(VMFSolid, "solid", solid, self.fs))
 
 
