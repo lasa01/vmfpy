@@ -84,9 +84,13 @@ class VMTColor(NamedTuple):
             return VMTColor(*colors)
         match = _VEC3_REGEX.match(value)
         if match is None:
-            raise VMTParseException("color syntax is invalid")
+            values: Sequence[str] = value.split(" ")
+            if len(values) != 3:
+                raise VMTParseException("color syntax is invalid")
+        else:
+            values = match.groups()
         try:
-            colors = [float(s) for s in match.groups()]
+            colors = [float(s) for s in values]
         except ValueError:
             raise VMTParseException("color contains an invalid float")
         except OverflowError:
