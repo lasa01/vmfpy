@@ -10,7 +10,7 @@ VDFDictKey = Union[str, Tuple[int, str]]
 
 
 class LowerCaseVDFDict(vdf.VDFDict):
-    def _normalize_key(self, key: VDFDictKey) -> VDFDictKey:
+    def _normalize_key(self, key: VDFDictKey) -> Tuple[int, str]:
         key = super()._normalize_key(key)
         return (key[0], key[1].lower())
 
