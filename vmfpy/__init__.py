@@ -425,7 +425,10 @@ class VMFEnvLightEntity(VMFLightEntity):
             self.angles = self._parse_custom_str(VMFVector.parse_str, "angles", data)
         else:
             self.angles = VMFVector(0, 0, 0)
-        self.pitch = self._parse_float_str("pitch", data)
+        if "pitch" in data:
+            self.pitch = self._parse_float_str("pitch", data)
+        else:
+            self.pitch = self.angles[0]
         """Used instead of angles value for reasons unknown."""
 
         color, brightness = self._parse_custom_str(VMFColor.parse_with_brightness, "_ambient", data)
