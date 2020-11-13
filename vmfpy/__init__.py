@@ -198,10 +198,10 @@ class VMFColor(NamedTuple):
     @staticmethod
     def parse(data: str) -> 'VMFColor':
         values = [s for s in data.split(" ") if s != ""]
-        if len(values) != 3:
-            raise VMFParseException("color doesn't have 3 values")
+        if len(values) < 3:
+            raise VMFParseException("color doesn't have at least 3 values")
         try:
-            color = VMFColor(*(int(s) for s in values))
+            color = VMFColor(*(int(s) for s in values[:3]))
         except ValueError:
             raise VMFParseException("color contains an invalid int")
         return color
