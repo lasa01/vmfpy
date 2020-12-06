@@ -20,5 +20,8 @@ setuptools.setup(
         "Programming Language :: Python :: 3"
     ],
     keywords="vmf valve parser",
-    install_requires=["vdf @ git+https://github.com/lasa01/vdf.git#egg=vdf", "vpk"],
+    install_requires=[
+        "vdf @ git+https://github.com/lasa01/vdf.git#egg=vdf",
+        "vpk @ git+https://github.com/lasa01/vpk.git#egg=vpk",
+    ],
 )
