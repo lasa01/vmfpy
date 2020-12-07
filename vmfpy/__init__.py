@@ -748,6 +748,8 @@ class VMF(_VMFParser):
         """List of other lights in the map."""
         self.func_entities: List[VMFBrushEntity] = list()
         """List of func (brush) entities in the map."""
+        self.trigger_entities: List[VMFBrushEntity] = list()
+        """List of trigger (brush) entites in the map."""
         self.prop_entities: List[VMFPropEntity] = list()
         """List of prop entities in the map."""
 
@@ -774,6 +776,9 @@ class VMF(_VMFParser):
             elif classname.startswith("func"):
                 entity_inst = self._parse_custom(VMFBrushEntity, "entity (func)", entity, self.fs)
                 self.func_entities.append(entity_inst)
+            elif classname.startswith("trigger"):
+                entity_inst = self._parse_custom(VMFBrushEntity, "entity (trigger)", entity, self.fs)
+                self.trigger_entities.append(entity_inst)
             elif classname in ("prop_static", "prop_detail", "prop_ragdoll", "prop_door_rotating",
                                "prop_dynamic", "prop_dynamic_override",
                                "prop_physics", "prop_physics_multiplayer", "prop_physics_override"):
