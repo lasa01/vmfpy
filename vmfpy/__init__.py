@@ -714,7 +714,11 @@ class VMF(_VMFParser):
         super().__init__()
         self.fs = fs
         """File system for opening game files."""
-        vdf_dict = vdf.load(file, mapper=LowerCaseVDFDict, merge_duplicate_keys=False, escaped=False)
+
+        try:
+            vdf_dict = vdf.load(file, mapper=LowerCaseVDFDict, merge_duplicate_keys=False, escaped=False)
+        except SyntaxError:
+            raise VMFParseException("vmf file is invalid")
 
         if "versioninfo" in vdf_dict:
             versioninfo = self._parse_dict("versioninfo", vdf_dict)

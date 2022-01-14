@@ -129,7 +129,10 @@ class VMTTransform(NamedTuple):
 class VMT():
     def __init__(self, file: AnyTextIO, fs: VMFFileSystem = VMFFileSystem(), allow_patch: bool = False) -> None:
         self.fs = fs
-        vdf_dict: dict = vdf.load(file, escaped=False)
+        try:
+            vdf_dict: dict = vdf.load(file, escaped=False)
+        except SyntaxError:
+            raise VMTParseException("material vmt file is invalid")
         if len(vdf_dict) != 1:
             raise VMTParseException("material does not contain exactly 1 member")
         shader_name: str = next(iter(vdf_dict))
@@ -154,7 +157,10 @@ class VMT():
                 if not isinstance(replaced, dict):
                     raise VMTParseException("included replace is not a dict")
                 patch_params.update(replaced)
-            vdf_dict = vdf.load(fs.open_file_utf8(included_name), escaped=False)
+            try:
+                vdf_dict = vdf.load(fs.open_file_utf8(included_name), escaped=False)
+            except SyntaxError:
+                raise VMTParseException("included material vmt file is invalid")
             if len(vdf_dict) != 1:
                 raise VMTParseException("included material does not contain exactly 1 member")
             shader_name = next(iter(vdf_dict))
