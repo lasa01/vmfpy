@@ -107,7 +107,7 @@ class VMFFileSystem(Mapping[PurePosixPath, AnyBinaryIO]):
             yield from self.iter_dir(directory)
 
     def iter_pak(self, pak_file: str) -> Iterator[Tuple[PurePosixPath, FileInfo]]:
-        pak = vpk.open(pak_file)
+        pak = vpk.open(pak_file, path_enc="latin1")
         for pak_path, metadata in pak.read_index_iter():
             path = vmf_path(pak_path)
             yield (path, FileInfo(pak_path, (pak, metadata)))
