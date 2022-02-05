@@ -131,7 +131,7 @@ class VMT():
         self.fs = fs
         try:
             vdf_dict: dict = vdf.load(file, escaped=False)
-        except SyntaxError:
+        except (SyntaxError, UnicodeDecodeError):
             raise VMTParseException("material vmt file is invalid")
         if len(vdf_dict) != 1:
             raise VMTParseException("material does not contain exactly 1 member")
@@ -159,7 +159,7 @@ class VMT():
                 patch_params.update(replaced)
             try:
                 vdf_dict = vdf.load(fs.open_file_utf8(included_name), escaped=False)
-            except SyntaxError:
+            except (SyntaxError, UnicodeDecodeError):
                 raise VMTParseException("included material vmt file is invalid")
             if len(vdf_dict) != 1:
                 raise VMTParseException("included material does not contain exactly 1 member")

@@ -717,7 +717,7 @@ class VMF(_VMFParser):
 
         try:
             vdf_dict = vdf.load(file, mapper=LowerCaseVDFDict, merge_duplicate_keys=False, escaped=False)
-        except SyntaxError:
+        except (SyntaxError, UnicodeDecodeError):
             raise VMFParseException("vmf file is invalid")
 
         if "versioninfo" in vdf_dict:
