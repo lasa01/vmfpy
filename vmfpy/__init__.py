@@ -157,7 +157,6 @@ class VMFVector(NamedTuple):
     @staticmethod
     def parse_str(data: str) -> 'VMFVector':
         nums = data.split(" ")
-        assert len(nums) == 3
         if len(nums) != 3:
             raise VMFParseException("vector doesn't contain 3 values")
         try:
